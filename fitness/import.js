@@ -282,6 +282,12 @@ function parseGarminDay(shot, rec) {
   }
   const night = shot.lines.find((l) => /(last night|overnight).{0,12}(avg|hrv)/i.test(l.text) && /\d+\s*ms/i.test(l.text));
   if (night) put(rec, 'hrvMs', toNum(night.text.match(/(\d+)\s*ms/i)[1]), 'Garmin', 'Garmin HRV (last night)');
+  // HRV Status page: "86 ms" above "Overnight Avg" — last night's HRV (the big number in the ring is the 7-day average).
+  const ov = findWord(shot, /^Overnight$/i);
+  if (ov && !night) {
+    const n = nearNumber(shot, ov, 'above', W * 0.12, (w, l) => /\bms\b/i.test(l.text));
+    if (n) put(rec, 'hrvMs', toNum(n.w.text), 'Garmin', 'Garmin HRV (overnight average)');
+  }
   // Body Battery: the number in its ring, below the label.
   // Measured from "Body" (the start of the card's label), so the Sleep Score card beside it isn't taken for it.
   const bbw = findWord(shot, /^Battery$/i);
