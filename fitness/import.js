@@ -215,7 +215,9 @@ async function parseWhoop(shot, rec) {
   // Recovery %: the big number just above "RECOVERY".
   const ri = L.findIndex((l) => /^\W*RECOVERY\W*$/.test(l.text));
   if (ri > 0) {
-    const above = L.slice(Math.max(0, ri - 2), ri).reverse().find((l) => /\d{1,3}\s*%/.test(l.text));
+    // The biggest number in the few lines above (the % is sometimes read as "¢" or "°", or as a line of its own).
+    const above = L.slice(Math.max(0, ri - 3), ri).filter((l) => /^\W*\d{1,3}(?!\d)/.test(l.text))
+      .sort((p, q) => (q.y1 - q.y0) - (p.y1 - p.y0))[0];
     const v = above ? firstNumber(above.text) : null;
     if (v != null && v <= 100) put(rec, 'recoveryScore', v, 'Whoop', 'Whoop recovery');
   }
