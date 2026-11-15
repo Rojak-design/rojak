@@ -6,6 +6,7 @@
 
    What is read:
      Garmin Connect  All Activities list               each activity's name, date and time → the calendar
+                     Today's Activity card             each activity's name (today) → the calendar
                      Personal Records (Running)        fastest 5K, 10K, half marathon, marathon with dates
                      At a Glance and other day pages   resting heart rate, HRV, Body Battery, sleep score
      Whoop           recovery and sleep pages          recovery %, HRV, resting heart rate, sleep performance,
@@ -198,12 +199,28 @@ function parseRecords(shot) {
   return out;
 }
 
+/* ---------- Garmin Connect: Today's Activity card ---------- */
+// "Today's Activity" (or "Yesterday's"): each activity's name, with its distance / time on the line under it. No time
+// of day is shown.
+function parseTodayCard(shot) {
+  const L = shot.lines.map((l) => cleanLine(l.text));
+  const h = L.findIndex((x) => /\b(today|yesterday).?s\s+activit/i.test(x));
+  if (h < 0) return [];
+  const date = /yesterday/i.test(L[h]) ? findDate('yesterday') : today();
+  const out = [];
+  for (let i = h + 1; i < L.length - 1; i++) {
+    if (/[A-Za-z]{3,}/.test(L[i]) && !/\d/.test(L[i]) && /\d/.test(L[i + 1]) && !/\bactivit/i.test(L[i])) out.push({ date, time: null, name: L[i] });
+  }
+  return out;
+}
+
 /* ---------- What kind of screenshot is it? ---------- */
 function detect(shot) {
   const t = shot.text;
   if (/WH\W?OO\W?P|HEART RATE VARIABILITY|SLEEP PERFORMANCE|HOURS\s+OF\s+SLEEP|LAST NIGHT.?S SLEEP|DAY STRAIN|^\W*STRAIN\W*$/im.test(t)) return 'whoop';
   if (/personal\s*records/i.test(t) || /\bhalf\s*marathon\b/i.test(t)) { shot.prs = parseRecords(shot); if (shot.prs.length) return 'garminRecords'; }
   shot.acts = parseActivityList(shot);
+  if (!shot.acts.length) shot.acts = parseTodayCard(shot);
   if (shot.acts.length) return 'garminList';
   if (/at a\s*glance|body battery|hrv status|\bresting\b|sleep score|training readiness|overnight hrv/i.test(t)) return 'garminDay';
   return null;
@@ -484,14 +501,17 @@ function recordsSheet(prs, shots, next) {
 // The activities read, each with its category to check. Ones already on the calendar are unticked.
 function activitiesSheet(rows, shots, next) {
   reopen = () => activitiesSheet(rows, shots, next);
-  const dup = (r) => state.activities.find((a) => a.date === r.date && (a.time ? a.time === r.time : sameName(a.name, r.name)));
+  // Already on the calendar: the same day and time; without a time (e.g. from Today's Activity), the same day and name
+  // or category.
+  const dup = (r) => state.activities.find((a) => a.date === r.date && (a.time && r.time ? a.time === r.time
+    : sameName(a.name, r.name) || a.catId === guessCat(r.name)));
   openSheet('Check imported activities', `<form class="form" id="iForm" novalidate>
       <div class="import-banner"><div>📷 <strong>Read ${rows.length} activit${rows.length > 1 ? 'ies' : 'y'}</strong> from ${shots.length} screenshot${shots.length > 1 ? 's' : ''}. Check each category — it's what shows on the calendar. Change the category for a name and that name gets it next time too. Nothing is saved until you tap Save.</div>
         <button type="button" class="link-btn" data-cats>Edit categories and icons ›</button>
         ${thumbs(shots)}</div>
       <div class="imp-list">${rows.map((r, i) => { const d = dup(r); return `<div class="imp-row${d ? ' dup' : ''}" data-i="${i}">
         <label class="check"><input type="checkbox" class="ion" ${d ? '' : 'checked'}>
-          <span><strong>${esc(r.name)}</strong><br><span class="muted small">${esc(niceDate(r.date))} · ${esc(r.time)}${d ? ' · already on the calendar' : ''}</span></span></label>
+          <span><strong>${esc(r.name)}</strong><br><span class="muted small">${esc(niceDate(r.date))}${r.time ? ` · ${esc(r.time)}` : ''}${d ? ' · already on the calendar' : ''}</span></span></label>
         <select class="icat" aria-label="Category for ${esc(r.name)}">${catOptions(d ? d.catId : guessCat(r.name))}</select></div>`; }).join('')}</div>
       <button class="btn" type="submit">Save</button>
     </form>`);
