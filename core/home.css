@@ -23,6 +23,7 @@ body {
 .small { font-size: 13px; }
 .center { text-align: center; }
 .hidden { display: none !important; }
+.nowrap { white-space: nowrap; }
 h2 { margin: 0; font-size: 18px; }
 
 /* The header's bottom edge is the top edge of the Money card: she and the cat sit exactly on it. */
@@ -192,3 +193,54 @@ main { padding: 0 16px; max-width: 640px; margin: 0 auto; }
 .wx-hour .h { color: var(--muted); font-size: 12px; }
 .wx-hour .i { width: 30px; height: 30px; line-height: 0; }
 .wx-hour .r { font-size: 11px; color: var(--muted); min-height: 14px; }
+
+/* ---------- Memories collage (core/memories.js): one day at a time, at the bottom of the home screen ---------- */
+.memories { position: relative; padding: 12px 12px 14px; }
+.mem-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+.mem-arrow {
+  flex: none; width: 32px; height: 32px; border-radius: 50%; border: 0; background: var(--bg); color: var(--muted);
+  font-size: 20px; line-height: 1; cursor: pointer;
+}
+.mem-arrow:disabled { opacity: .35; cursor: default; }
+.mem-title { border: 0; background: none; font: inherit; color: var(--text); cursor: pointer; display: flex; flex-direction: column; align-items: center; padding: 2px 6px; }
+#memDate { font-weight: 700; font-size: 16px; }
+.mem-sub { font-size: 12px; color: var(--muted); min-height: 15px; }
+.mem-today { display: block; margin: -4px auto 8px; font-size: 13px; border: 0; background: none; color: var(--primary); font-weight: 600; cursor: pointer; }
+.mem-pick { position: absolute; top: 12px; left: 50%; width: 1px; height: 1px; opacity: 0; pointer-events: none; border: 0; padding: 0; }
+/* Rows of whole photos: each row's height is set by memories.js so its photos fill the width. */
+.mem-grid { display: flex; flex-direction: column; gap: 5px; min-height: 60px; }
+.mem-row { display: flex; gap: 5px; }
+.mem-row.centred { justify-content: center; }
+.mem-tile { border: 0; padding: 0; margin: 0; border-radius: 10px; overflow: hidden; background: var(--line); cursor: pointer; min-width: 0; height: 100%; }
+.mem-tile img { width: 100%; height: 100%; object-fit: cover; display: block; animation: mem-in .3s ease-out; }
+@keyframes mem-in { from { opacity: 0; } to { opacity: 1; } }
+.mem-empty { text-align: center; color: var(--muted); padding: 14px 10px 6px; }
+.mem-empty p { margin: 6px 0 12px; }
+.mem-empty-art { font-size: 30px; }
+.mem-add-big { display: inline-block; width: auto; padding: 12px 20px; margin: 0; }
+.mem-add {
+  position: absolute; right: 8px; bottom: 8px; width: 42px; height: 42px; border-radius: 50%; border: 0;
+  background: var(--primary); color: #fff; font-size: 26px; line-height: 1; cursor: pointer; box-shadow: 0 2px 6px rgba(0,0,0,.25);
+}
+@media (prefers-color-scheme: dark) { .mem-add { color: #06201d; } }
+.mem-grid.slide-l { animation: mem-slide-l .25s ease-out; }
+.mem-grid.slide-r { animation: mem-slide-r .25s ease-out; }
+@keyframes mem-slide-l { from { opacity: .3; transform: translateX(24px); } to { opacity: 1; transform: none; } }
+@keyframes mem-slide-r { from { opacity: .3; transform: translateX(-24px); } to { opacity: 1; transform: none; } }
+.mem-menu .btn { margin: 0 0 10px; }
+/* Full screen */
+.mem-view { position: fixed; inset: 0; z-index: 40; background: #000; display: flex; align-items: center; justify-content: center; }
+.mem-view img { max-width: 100%; max-height: 100%; object-fit: contain; }
+.mem-view-top, .mem-view-bottom {
+  position: absolute; left: 0; right: 0; display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 12px 14px; color: #fff; font-size: 14px; background: linear-gradient(rgba(0,0,0,.55), rgba(0,0,0,0));
+}
+.mem-view-top { top: 0; padding-top: calc(env(safe-area-inset-top, 0px) + 12px); }
+.mem-view-bottom { bottom: 0; justify-content: center; padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 16px); background: linear-gradient(rgba(0,0,0,0), rgba(0,0,0,.55)); }
+.mem-view button { border: 0; background: rgba(255,255,255,.16); color: #fff; font: inherit; border-radius: 20px; padding: 8px 14px; cursor: pointer; }
+#memViewClose { width: 38px; height: 38px; padding: 0; border-radius: 50%; font-size: 17px; flex: none; }
+#memViewDel { color: #ffb4b4; }
+.mem-view-nav { position: absolute; top: 50%; transform: translateY(-50%); width: 40px; height: 40px; padding: 0 !important; border-radius: 50% !important; font-size: 22px !important; }
+.mem-view-nav.prev { left: 10px; }
+.mem-view-nav.next { right: 10px; }
+@media (prefers-reduced-motion: reduce) { .mem-grid.slide-l, .mem-grid.slide-r, .mem-tile img { animation: none; } }

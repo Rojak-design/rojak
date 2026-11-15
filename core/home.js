@@ -135,15 +135,21 @@ function renderHabits(h, sources) {
   HabitsEngine.use({ habits: h.habits, checks: h.checks || [] }, sources);
   const s = HabitsEngine.summary();
   if (!s.live) {
-    const next = h.habits.map((x) => HabitsEngine.firstDay(x)).sort()[0];
-    el.innerHTML = `<div class="muted small" style="grid-column:1/-1">Your habits start on ${esc(dayLabel(next))}.</div>`;
+    // Nothing running today: say when the next one starts, or that only finished habits are left.
+    el.innerHTML = `<div class="muted small" style="grid-column:1/-1">${s.nextStart ? `Your next habit starts on ${esc(dayLabel(s.nextStart))}.`
+      : `No current habits — your ${s.finished === 1 ? 'finished habit is' : 'finished habits are'} kept in Habits. Tap to add a new one.`}</div>`;
     return;
   }
-  const left = s.notDone.map((x) => x.name);
+  // Linked daily habits show how far along they are today, e.g. "Drink 2½ bottles of water a day (½ of 2½)".
+  const halves = (n) => { const r = Math.round(n * 2) / 2; return r % 1 ? `${Math.floor(r) || ''}½` : String(r); };
+  const t = HabitsEngine.today();
+  // (HTML: the progress in brackets is kept together on one line.)
+  const left = s.notDone.map((x) => esc(x.name) + (HabitsEngine.isLinked(x)
+    ? ` <span class="nowrap">(${halves(HabitsEngine.measure(x, t, t).value)} of ${halves(HabitsEngine.targetOf(x))})</span>` : ''));
   const risky = s.risks.slice(0, 4);
   el.innerHTML = `
-    <div class="stat"><div class="label">Today</div><div class="value">${s.daily ? `${s.doneToday}<small>/${s.daily}</small>` : '–'}</div>
-      <div class="sub">${!s.daily ? 'No daily habits' : left.length ? esc(`To do: ${left.slice(0, 3).join(', ')}${left.length > 3 ? ` +${left.length - 3}` : ''}`) : 'All done ✓'}</div></div>
+    <div class="stat"><div class="label">Daily habits done today</div><div class="value">${s.daily ? `${s.doneToday}<small>/${s.daily}</small>` : '–'}</div>
+      <div class="sub">${!s.daily ? 'No daily habits' : left.length ? `To do: ${left.slice(0, 3).join(', ')}${left.length > 3 ? ` +${left.length - 3}` : ''}` : 'All done ✓'}</div></div>
     <div class="stat"><div class="label">At risk</div><div class="value ${s.risks.length ? 'neg' : ''}">${s.others ? s.risks.length : '–'}</div>
       <div class="sub">${!s.others ? 'No weekly or monthly habits' : s.risks.length ? 'this week or month' : `All on track ✓${s.metNow ? ` · ${s.metNow} done` : ''}`}</div></div>
     ${risky.length ? `<div class="risks">${risky.map((x) => `<div class="risk${x.over ? ' over' : ''}"><span class="risk-icon">${esc(x.icon)}</span>
@@ -174,6 +180,9 @@ async function renderBackupInfo() {
     } catch { /* ignore */ }
   }
 }
+// The Habits card updates as soon as a water bottle is tapped (Water habits read the bottles).
+let lastHabits = null;
+Water.onChange(() => { if (lastHabits) { try { renderHabits(...lastHabits); } catch (err) { console.error(err); } } });
 async function refresh() {
   try {
     const water = await Water.load();
@@ -184,6 +193,7 @@ async function refresh() {
       const habits = await Rojak.load('habits');
       Water.setHabits(habits); // the bottles also celebrate when a Water habit's target is reached
       renderHabits(habits, { money, fitness, water });
+      lastHabits = [habits, { money, fitness, water }];
     } catch (err) {
       console.error(err);
       $('#habitsSummary').innerHTML = '<div class="muted small" style="grid-column:1/-1">Tap to open Habits.</div>';
@@ -278,8 +288,71 @@ $('#shotsBtn').addEventListener('click', async () => {
   toast(`${n} screenshot${n === 1 ? '' : 's'} deleted`);
 });
 
+/* ----- Memories photos: their own backup, restore and delete (core/photostore.js) ----- */
+async function refreshPhotoInfo() {
+  try { await Photos.load(); } catch { return; }
+  const u = Photos.usage();
+  $('#photoInfo').textContent = u.count
+    ? `${u.count} memories photo${u.count > 1 ? 's' : ''} (about ${(u.bytes / 1024 / 1024).toFixed(1)} MB). Photos are backed up separately, so the backup above stays small.`
+    : 'Memories photos are backed up separately, so the backup above stays small.';
+  $('#photoWipeBtn').classList.toggle('hidden', !u.count);
+}
+// Saves a file: the share sheet on phones (save to Files / Drive), otherwise a download.
+async function saveFile(blob, name, title) {
+  const file = new File([blob], name, { type: blob.type });
+  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    try { await navigator.share({ files: [file], title }); return 'shared'; } catch (err) { if (err.name === 'AbortError') return 'cancelled'; }
+  }
+  const url = URL.createObjectURL(blob), a = document.createElement('a');
+  a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10000);
+  return 'downloaded';
+}
+$('#photoBackupBtn').addEventListener('click', async () => {
+  try {
+    await Photos.load();
+    if (!Photos.usage().count) return toast('No memories photos to back up yet');
+    toast('Making the photo backup…');
+    const { blob, name, count } = await Photos.backupFile();
+    const how = await saveFile(blob, name, 'Rojak photos');
+    if (how === 'downloaded') toast(`Photo backup downloaded (${count} photo${count > 1 ? 's' : ''})`);
+  } catch (err) {
+    console.error(err);
+    toast('Could not make the photo backup');
+  }
+});
+$('#photoRestoreFile').addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  e.target.value = '';
+  if (!file) return;
+  try {
+    toast('Restoring photos…');
+    const { added, skipped } = await Photos.restoreFile(file, (i, n) => { if (n > 3) toast(`Restoring photos… ${i} of ${n}`); });
+    await Memories.reload();
+    await refreshPhotoInfo();
+    toast(`${added} photo${added === 1 ? '' : 's'} restored${skipped ? ` · ${skipped} already here` : ''}`);
+  } catch (err) {
+    console.error(err);
+    toast(/not a|zip/i.test(err.message) ? `That file can't be restored: ${err.message}` : 'Could not restore the photos');
+  }
+});
+$('#photoWipeBtn').addEventListener('click', async () => {
+  const n = Photos.usage().count;
+  if (!confirm(`Delete all ${n} memories photo${n === 1 ? '' : 's'} from Rojak? (They stay in your phone's gallery.)`)) return;
+  if (!confirm('Are you really sure? This can\'t be undone — back up photos first if you might need them.')) return;
+  try {
+    const k = await Photos.removeAll();
+    await Memories.reload();
+    await refreshPhotoInfo();
+    toast(`${k} photo${k === 1 ? '' : 's'} deleted`);
+  } catch (err) {
+    console.error(err);
+    toast('Could not delete the photos');
+  }
+});
+
 $('#wipeBtn').addEventListener('click', async () => {
-  if (!confirm('Delete ALL your data in Rojak (Money, Fitness and every other module) from this phone?')) return;
+  if (!confirm('Delete ALL your data in Rojak (Money, Fitness and every other module) from this phone? (Memories photos are kept: use "Delete all photos" for those.)')) return;
   if (!confirm('Are you really sure? Export a backup first if you might need it.')) return;
   try {
     await Rojak.deleteAll();
@@ -349,7 +422,7 @@ async function init() {
   $('#today').textContent = new Date().toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' }); // short, to leave room for the weather
   $('#hairNote').textContent = `This month: ${hair.name} hair and a ${cat.name} cat. They change every month.`;
   setTimeout(hello, 350);
-  if (!init.weather) { init.weather = true; Weather.start(); }
+  if (!init.weather) { init.weather = true; Weather.start(); Memories.start().then(refreshPhotoInfo); }
   await refresh();
   if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});

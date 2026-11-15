@@ -5,6 +5,8 @@
                     so everything saved earlier still loads
      'mod:<id>'     each later module's data (Habits, Fitness, …)
      'img:<id>'     screenshots
+     'photo:<id>', 'photos:index'   memories photos (see photostore.js): not in the main backup, restore or undo,
+                    and "Delete all data" leaves them; they have their own backup and delete
      'rojak:meta'   when each entry was first saved and last changed, when the last backup was made and when
                     data was last restored or deleted
      'rojak:undo'   a copy of everything (except screenshots) made just before the last restore or delete,
@@ -264,7 +266,8 @@ const Rojak = (() => {
     const lastBackupAt = meta.lastBackupAt;
     await dbDo('readwrite', (s) => {
       const r = s.getAllKeys();
-      r.onsuccess = () => { for (const k of r.result) if (k !== UNDO_KEY) s.delete(k); };
+      // Memories photos stay: they have their own "Delete all photos" (photostore.js).
+      r.onsuccess = () => { for (const k of r.result) if (k !== UNDO_KEY && !(typeof k === 'string' && k.startsWith('photo'))) s.delete(k); };
       return r;
     });
     meta = Object.assign(emptyMeta(), { lastBackupAt, changedAt: new Date().toISOString() });

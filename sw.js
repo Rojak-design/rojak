@@ -2,7 +2,7 @@
 // When you change any app file, bump this version number AND the ?v= numbers in index.html, money/index.html,
 // fitness/index.html and habits/index.html
 // so phones get the update with all files matching.
-const VERSION = 75;
+const VERSION = 80;
 const CACHE = 'rojak-v' + VERSION;
 const FILES = [
   './',
@@ -13,6 +13,8 @@ const FILES = [
   './core/weather.js?v=' + VERSION,
   './core/water.js?v=' + VERSION,
   './core/cat.js?v=' + VERSION,
+  './core/photostore.js?v=' + VERSION,
+  './core/memories.js?v=' + VERSION,
   './core/home.js?v=' + VERSION,
   './money/',
   './money/index.html',

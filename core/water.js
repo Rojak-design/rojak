@@ -95,10 +95,12 @@ const Water = (() => {
   }
   // Saves one at a time, in order, so quick taps are all kept.
   let saving = Promise.resolve();
+  const changed = []; // called with the new count on every tap (onChange)
   function setCount(n) {
     let rec = data.days.find((x) => x.date === day);
     if (!rec) { rec = { id: day, date: day, bottles: 0 }; data.days.push(rec); }
     rec.bottles = n;
+    changed.forEach((fn) => { try { fn(n); } catch (err) { console.error(err); } }); // e.g. the Habits card updates
     saving = saving.then(() => Rojak.save('water', data)).catch((err) => { console.error(err); toast('Could not save the water bottles'); });
     return saving;
   }
@@ -147,7 +149,7 @@ const Water = (() => {
   function setHabits(h) {
     const t = dayNow();
     habitGoals = ((h && h.habits) || [])
-      .filter((x) => x.kind === 'linked' && x.rule && x.rule.id === 'water.bottles' && x.date <= t && +x.target > 0 && +x.target <= MAX)
+      .filter((x) => x.kind === 'linked' && x.rule && x.rule.id === 'water.bottles' && x.date <= t && !(x.end && x.end < t) && +x.target > 0 && +x.target <= MAX)
       .map((x) => half(+x.target));
     showCount(countOn(day));
   }
@@ -184,5 +186,5 @@ const Water = (() => {
   function checkDay() { if (dayNow() !== day) { day = dayNow(); render(); } }
   setInterval(checkDay, 60000);
 
-  return { load, render, checkDay, setHabits, data: () => data };
+  return { load, render, checkDay, setHabits, onChange: (fn) => changed.push(fn), data: () => data };
 })();
