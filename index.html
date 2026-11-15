@@ -14,7 +14,7 @@
   <meta name="apple-mobile-web-app-title" content="Rojak">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <!-- When app files change, bump ?v= here, in money/index.html, fitness/index.html, habits/index.html and the version in sw.js (keep them all the same). -->
-  <link rel="stylesheet" href="core/home.css?v=75">
+  <link rel="stylesheet" href="core/home.css?v=76">
 </head>
 <body>
   <!-- She and the cat peek over the top edge of the first card (the water bottles); the header's bottom is that edge. -->
@@ -62,6 +62,23 @@
       <div class="card soon"><span class="module-icon">🗓️</span><h2>Scheduler</h2><div class="muted small">Coming soon</div></div>
     </div>
 
+    <!-- Daily memories collage (core/memories.js, photos in core/photostore.js): not a module -->
+    <section class="card memories" id="memories" aria-label="Memories">
+      <div class="mem-head">
+        <button type="button" class="mem-arrow" id="memPrev" aria-label="Day before">‹</button>
+        <button type="button" class="mem-title" id="memDateBtn" aria-label="Pick a day">
+          <span id="memDate"></span><span class="mem-sub" id="memSub"></span>
+        </button>
+        <button type="button" class="mem-arrow" id="memNext" aria-label="Next day">›</button>
+      </div>
+      <button type="button" class="link-btn mem-today hidden" id="memToday">Back to today</button>
+      <input type="date" id="memPickDate" class="mem-pick" tabindex="-1" aria-hidden="true">
+      <div id="memGrid" class="mem-grid"></div>
+      <button type="button" class="mem-add hidden" id="memAdd" aria-label="Add photos">+</button>
+      <input type="file" id="memFiles" accept="image/*" multiple hidden>
+      <input type="file" id="memCamera" accept="image/*" capture="environment" hidden>
+    </section>
+
     <!-- Backup and restore for the whole app: one file with every module (screenshots are never included) -->
     <div class="card backup">
       <h2>💾 Backup</h2>
@@ -78,6 +95,14 @@
       <div id="shotsBox" class="sub-box hidden">
         <p class="muted small" id="shotsInfo"></p>
         <button class="btn secondary" id="shotsBtn">Delete saved screenshots</button>
+      </div>
+      <div class="sub-box" id="photoBox">
+        <p class="muted small" id="photoInfo">Memories photos are backed up separately, so the backup above stays small.</p>
+        <button class="btn secondary" id="photoBackupBtn">Back up photos</button>
+        <label class="btn secondary file-btn">Restore photos
+          <input type="file" id="photoRestoreFile" accept=".zip,application/zip">
+        </label>
+        <button class="btn danger hidden" id="photoWipeBtn">Delete all photos</button>
       </div>
       <button class="btn danger" id="wipeBtn">Delete all data</button>
       <p class="muted small" id="storageInfo"></p>
@@ -98,15 +123,26 @@
     </div>
   </div>
 
+  <!-- Memories: one photo full screen -->
+  <div id="memView" class="mem-view hidden" role="dialog" aria-modal="true" aria-label="Photo">
+    <img id="memViewImg" alt="">
+    <div class="mem-view-top"><span id="memViewInfo"></span><button type="button" id="memViewClose" aria-label="Close">✕</button></div>
+    <button type="button" class="mem-view-nav prev" id="memViewPrev" aria-label="Previous photo">‹</button>
+    <button type="button" class="mem-view-nav next" id="memViewNext" aria-label="Next photo">›</button>
+    <div class="mem-view-bottom"><button type="button" id="memViewDel">🗑 Delete</button></div>
+  </div>
+
   <div id="toast" class="toast hidden"></div>
 
-  <script src="core/store.js?v=75"></script>
-  <script src="core/avatar.js?v=75"></script>
-  <script src="core/weather.js?v=75"></script>
-  <script src="core/water.js?v=75"></script>
-  <script src="core/cat.js?v=75"></script>
-  <script src="habits/rules.js?v=75"></script>
-  <script src="habits/engine.js?v=75"></script>
-  <script src="core/home.js?v=75"></script>
+  <script src="core/store.js?v=76"></script>
+  <script src="core/avatar.js?v=76"></script>
+  <script src="core/weather.js?v=76"></script>
+  <script src="core/water.js?v=76"></script>
+  <script src="core/cat.js?v=76"></script>
+  <script src="habits/rules.js?v=76"></script>
+  <script src="habits/engine.js?v=76"></script>
+  <script src="core/photostore.js?v=76"></script>
+  <script src="core/memories.js?v=76"></script>
+  <script src="core/home.js?v=76"></script>
 </body>
 </html>
