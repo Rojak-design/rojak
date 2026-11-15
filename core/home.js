@@ -283,8 +283,71 @@ $('#shotsBtn').addEventListener('click', async () => {
   toast(`${n} screenshot${n === 1 ? '' : 's'} deleted`);
 });
 
+/* ----- Memories photos: their own backup, restore and delete (core/photostore.js) ----- */
+async function refreshPhotoInfo() {
+  try { await Photos.load(); } catch { return; }
+  const u = Photos.usage();
+  $('#photoInfo').textContent = u.count
+    ? `${u.count} memories photo${u.count > 1 ? 's' : ''} (about ${(u.bytes / 1024 / 1024).toFixed(1)} MB). Photos are backed up separately, so the backup above stays small.`
+    : 'Memories photos are backed up separately, so the backup above stays small.';
+  $('#photoWipeBtn').classList.toggle('hidden', !u.count);
+}
+// Saves a file: the share sheet on phones (save to Files / Drive), otherwise a download.
+async function saveFile(blob, name, title) {
+  const file = new File([blob], name, { type: blob.type });
+  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    try { await navigator.share({ files: [file], title }); return 'shared'; } catch (err) { if (err.name === 'AbortError') return 'cancelled'; }
+  }
+  const url = URL.createObjectURL(blob), a = document.createElement('a');
+  a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10000);
+  return 'downloaded';
+}
+$('#photoBackupBtn').addEventListener('click', async () => {
+  try {
+    await Photos.load();
+    if (!Photos.usage().count) return toast('No memories photos to back up yet');
+    toast('Making the photo backup…');
+    const { blob, name, count } = await Photos.backupFile();
+    const how = await saveFile(blob, name, 'Rojak photos');
+    if (how === 'downloaded') toast(`Photo backup downloaded (${count} photo${count > 1 ? 's' : ''})`);
+  } catch (err) {
+    console.error(err);
+    toast('Could not make the photo backup');
+  }
+});
+$('#photoRestoreFile').addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  e.target.value = '';
+  if (!file) return;
+  try {
+    toast('Restoring photos…');
+    const { added, skipped } = await Photos.restoreFile(file, (i, n) => { if (n > 3) toast(`Restoring photos… ${i} of ${n}`); });
+    await Memories.reload();
+    await refreshPhotoInfo();
+    toast(`${added} photo${added === 1 ? '' : 's'} restored${skipped ? ` · ${skipped} already here` : ''}`);
+  } catch (err) {
+    console.error(err);
+    toast(/not a|zip/i.test(err.message) ? `That file can't be restored: ${err.message}` : 'Could not restore the photos');
+  }
+});
+$('#photoWipeBtn').addEventListener('click', async () => {
+  const n = Photos.usage().count;
+  if (!confirm(`Delete all ${n} memories photo${n === 1 ? '' : 's'} from Rojak? (They stay in your phone's gallery.)`)) return;
+  if (!confirm('Are you really sure? This can\'t be undone — back up photos first if you might need them.')) return;
+  try {
+    const k = await Photos.removeAll();
+    await Memories.reload();
+    await refreshPhotoInfo();
+    toast(`${k} photo${k === 1 ? '' : 's'} deleted`);
+  } catch (err) {
+    console.error(err);
+    toast('Could not delete the photos');
+  }
+});
+
 $('#wipeBtn').addEventListener('click', async () => {
-  if (!confirm('Delete ALL your data in Rojak (Money, Fitness and every other module) from this phone?')) return;
+  if (!confirm('Delete ALL your data in Rojak (Money, Fitness and every other module) from this phone? (Memories photos are kept: use "Delete all photos" for those.)')) return;
   if (!confirm('Are you really sure? Export a backup first if you might need it.')) return;
   try {
     await Rojak.deleteAll();
@@ -354,7 +417,7 @@ async function init() {
   $('#today').textContent = new Date().toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' }); // short, to leave room for the weather
   $('#hairNote').textContent = `This month: ${hair.name} hair and a ${cat.name} cat. They change every month.`;
   setTimeout(hello, 350);
-  if (!init.weather) { init.weather = true; Weather.start(); }
+  if (!init.weather) { init.weather = true; Weather.start(); Memories.start().then(refreshPhotoInfo); }
   await refresh();
   if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
