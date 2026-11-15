@@ -149,7 +149,7 @@ const Water = (() => {
   function setHabits(h) {
     const t = dayNow();
     habitGoals = ((h && h.habits) || [])
-      .filter((x) => x.kind === 'linked' && x.rule && x.rule.id === 'water.bottles' && x.date <= t && +x.target > 0 && +x.target <= MAX)
+      .filter((x) => x.kind === 'linked' && x.rule && x.rule.id === 'water.bottles' && x.date <= t && !(x.end && x.end < t) && +x.target > 0 && +x.target <= MAX)
       .map((x) => half(+x.target));
     showCount(countOn(day));
   }

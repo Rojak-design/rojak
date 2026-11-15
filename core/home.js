@@ -135,8 +135,9 @@ function renderHabits(h, sources) {
   HabitsEngine.use({ habits: h.habits, checks: h.checks || [] }, sources);
   const s = HabitsEngine.summary();
   if (!s.live) {
-    const next = h.habits.map((x) => HabitsEngine.firstDay(x)).sort()[0];
-    el.innerHTML = `<div class="muted small" style="grid-column:1/-1">Your habits start on ${esc(dayLabel(next))}.</div>`;
+    // Nothing running today: say when the next one starts, or that only finished habits are left.
+    el.innerHTML = `<div class="muted small" style="grid-column:1/-1">${s.nextStart ? `Your next habit starts on ${esc(dayLabel(s.nextStart))}.`
+      : `No current habits — your ${s.finished === 1 ? 'finished habit is' : 'finished habits are'} kept in Habits. Tap to add a new one.`}</div>`;
     return;
   }
   // Linked daily habits show how far along they are today, e.g. "Drink 2½ bottles of water a day (½ of 2½)".

@@ -4,7 +4,7 @@
    Saved under 'mod:habits' (see ../core/store.js). Every entry has a date (YYYY-MM-DD), and the store adds
    `savedAt` / `updatedAt`:
      habits:  { id, name, kind: 'manual' | 'linked', freq: 'daily' | 'weekly' | 'monthly', target, date (the start
-                date), rule (linked habits only): { id (see rules.js), …the rule's choices, e.g. cats or accounts } }
+                date), end (optional: the last day; after it the habit is finished and its record kept), rule (linked habits only): { id (see rules.js), …the rule's choices, e.g. cats or accounts } }
               target: times per week / month for manual habits (1 for daily); for linked habits the number to reach
               in the rule's unit (runs, S$ saved…)
      checks:  { id, habitId, date }   one per day a manual habit was ticked as done
@@ -78,12 +78,12 @@ function toast(msg) {
 }
 
 /* ---------- Periods, progress and streaks: shared with the home screen (engine.js) ---------- */
-const { FREQS, freqOf, isLinked, ruleOf, ruleReady, kindOf, targetOf, started, atMost, periodWord, usesCycles, spanOf, firstDay, measure, doneDays, periods, stats, plural, freqText, progressText } = HabitsEngine;
+const { FREQS, freqOf, isLinked, ruleOf, ruleReady, kindOf, targetOf, started, ended, lastDay, atMost, periodWord, usesCycles, spanOf, firstDay, measure, doneDays, periods, stats, plural, freqText, progressText } = HabitsEngine;
 
 /* ---------- Ticking ---------- */
 const isDone = (h, iso) => state.checks.some((c) => c.habitId === h.id && c.date === iso);
 async function toggle(h, iso) {
-  if (isLinked(h) || iso < h.date || iso > today()) return;
+  if (isLinked(h) || iso < h.date || iso > today() || (h.end && iso > h.end)) return;
   const i = state.checks.findIndex((c) => c.habitId === h.id && c.date === iso);
   if (i >= 0) state.checks.splice(i, 1);
   else state.checks.push({ id: uid(), habitId: h.id, date: iso });
@@ -101,6 +101,10 @@ const shownMonth = {}, shownYear = {};
 // This week's or month's progress, e.g. "2 of 3 this week · 2 days left".
 function progressLine(h, st, t) {
   const p = st.current;
+  if (ended(h, t)) {
+    const days = daysBetween(h.date, h.end) + 1;
+    return `<div class="progress-line"><strong>Finished</strong> ${esc(shortDate(h.date))} – ${esc(niceDate(h.end, true))} <span class="muted">(${plural(days, 'day', 'days')})</span></div>`;
+  }
   if (!p) return '';
   if (h.freq === 'daily' && isLinked(h)) {
     // Daily linked habits (e.g. water): today's amount against the target.
@@ -127,7 +131,7 @@ function progressLine(h, st, t) {
 }
 function statsHtml(h, st) {
   const u = periodWord(h), us = u === 'pay cycle' ? 'pay cycles' : u + 's';
-  return `<div class="stats"><span>🔥 Streak <strong>${plural(st.streak, u, us)}</strong></span><span>Best <strong>${st.best}</strong></span>
+  return `<div class="stats"><span>🔥 ${ended(h) ? 'Final streak' : 'Streak'} <strong>${plural(st.streak, u, us)}</strong></span><span>Best <strong>${st.best}</strong></span>
     <span>Done <strong>${st.pct == null ? '–' : st.pct + '%'}</strong>${st.counted ? ` (${st.met} of ${plural(st.counted, u, us)})` : ''}</span></div>`;
 }
 
@@ -137,7 +141,7 @@ function statsHtml(h, st) {
 function monthGrid(h, ym, t, opts = {}) {
   const first = ym + '-01', last = addDays(addMonths(first, 1), -1);
   const done = doneDays(h, first, last < t ? last : t);
-  const start = firstDay(h), linked = isLinked(h);
+  const start = firstDay(h), linked = isLinked(h), stop = h.end || '9999';
   const weekly = h.freq === 'weekly' && !opts.big;
   const byStart = {};
   if (weekly) for (const p of periods(h, t)) byStart[p.start] = p;
@@ -148,6 +152,7 @@ function monthGrid(h, ym, t, opts = {}) {
       if (d.slice(0, 7) !== ym) { cells += '<span class="sq blank"></span>'; continue; }
       const n = +d.slice(8);
       if (d < start) { cells += `<span class="sq before" aria-label="${esc(niceDate(d))}: before the start date">${opts.big ? n : ''}</span>`; continue; }
+      if (d > stop && d <= t) { cells += `<span class="sq before" aria-label="${esc(niceDate(d))}: after the end date">${opts.big ? n : ''}</span>`; continue; }
       if (d > t) { cells += `<span class="sq future">${opts.big ? n : ''}</span>`; continue; }
       const on = done.has(d), cls = `sq${on ? ' on' : ''}${d === t ? ' today' : ''}`, label = `${esc(niceDate(d))}: ${on ? 'done' : 'not done'}`;
       cells += linked ? `<span class="${cls} auto" aria-label="${label}">${opts.big || d === t ? n : ''}</span>`
@@ -165,7 +170,7 @@ function monthGrid(h, ym, t, opts = {}) {
 }
 // The month calendar with ‹ › (or swipe) to look at earlier months, back to the month the habit started.
 function miniMonth(h, t) {
-  const min = firstDay(h).slice(0, 7), max = t.slice(0, 7);
+  const min = firstDay(h).slice(0, 7), max = lastDay(h, t).slice(0, 7);
   let ym = shownMonth[h.id] || max;
   if (ym < min) ym = min;
   if (ym > max) ym = max;
@@ -178,7 +183,7 @@ function miniMonth(h, t) {
 // Monthly habits: Jan to Dec in one row, filled when the month's target was met, this month outlined. (Money habits
 // with a payday: each square is the pay cycle named after that month.)
 function yearRow(h, st, t) {
-  const firstMonth = spanOf(h, firstDay(h)).month, nowMonth = spanOf(h, t).month;
+  const firstMonth = spanOf(h, firstDay(h)).month, nowMonth = spanOf(h, lastDay(h, t)).month, done = ended(h, t);
   const min = +firstMonth.slice(0, 4), max = +nowMonth.slice(0, 4);
   let y = shownYear[h.id] || max;
   if (y < min) y = min;
@@ -195,7 +200,7 @@ function yearRow(h, st, t) {
     else if (p && p.nodata) { cls += ' nodata'; what = 'not tracked (no balance from before it began)'; }
     else if (p && p.status === 'met') { cls += ' on'; what = `target met (${progressText(h, p.value, p.target)})`; }
     else { what = p ? progressText(h, p.value, p.target) : ''; if (p && p.status === 'missed' && atMost(h)) cls += ' over'; }
-    if (key === nowMonth) cls += ' now';
+    if (key === nowMonth && !done) cls += ' now';
     const tap = !cls.includes('before') && !cls.includes('future');
     const inner = !isLinked(h) && p && p.value && p.status !== 'met' ? p.value : '';
     cells += `<div class="mo-cell"><${tap ? `button type="button" data-month="${h.id}" data-s="${key}"` : 'span'} class="${cls}" aria-label="${esc(label)}: ${esc(what)}">${inner}</${tap ? 'button' : 'span'}><span class="mo-l">${MONTHS[m - 1]}</span></div>`;
@@ -208,7 +213,8 @@ function yearRow(h, st, t) {
 }
 function habitCard(h, t) {
   const r = ruleOf(h);
-  const name = `<button type="button" class="habit-name" data-edit="${h.id}"><div class="title">${esc(h.name)}</div><div class="sub">${esc(freqText(h))}</div></button>`;
+  const until = h.end && !ended(h, t) ? ` · until ${shortDate(h.end)}` : '';
+  const name = `<button type="button" class="habit-name" data-edit="${h.id}"><div class="title">${esc(h.name)}</div><div class="sub">${esc(freqText(h) + until)}</div></button>`;
   const first = firstDay(h);
   if (!started(h, t) || first > t) {
     return `<div class="habit not-started"><div class="habit-top">${name}<span class="tick" aria-hidden="true">${isLinked(h) && r ? r.icon : '✓'}</span></div>
@@ -216,7 +222,8 @@ function habitCard(h, t) {
   }
   const st = stats(h, t);
   let badge;
-  if (isLinked(h)) {
+  if (ended(h, t)) badge = '<span class="tick ended" title="Finished" aria-label="Finished">🏁</span>';
+  else if (isLinked(h)) {
     const met = st.current && st.current.status === 'met';
     badge = `<span class="tick auto${met ? ' on' : ''}" title="Checked automatically from ${esc(r ? r.moduleName : 'another module')}">${met ? '✓' : r ? r.icon : '🔗'}</span>`;
   } else {
@@ -225,9 +232,11 @@ function habitCard(h, t) {
   }
   const warn = isLinked(h) && !ruleReady(r) ? `<div class="warn-line">${r ? `Nothing saved in ${esc(r.moduleName)} yet, so this counts as 0.` : 'This habit\'s rule isn\'t available in this version.'}</div>` : '';
   const head = `<div class="habit-top">${name}${badge}</div>${warn}`;
-  if (h.freq === 'monthly') return `<div class="habit">${head}${yearRow(h, st, t)}${progressLine(h, st, t)}${statsHtml(h, st)}</div>`;
-  return `<div class="habit">${head}<div class="habit-body">${miniMonth(h, t)}<div class="side">${progressLine(h, st, t)}${statsHtml(h, st)}</div></div></div>`;
+  const cls = ended(h, t) ? 'habit finished' : 'habit';
+  if (h.freq === 'monthly') return `<div class="${cls}">${head}${yearRow(h, st, t)}${progressLine(h, st, t)}${statsHtml(h, st)}</div>`;
+  return `<div class="${cls}">${head}<div class="habit-body">${miniMonth(h, t)}<div class="side">${progressLine(h, st, t)}${statsHtml(h, st)}</div></div></div>`;
 }
+let showFinished = false;
 function render() {
   const t = today();
   $('#todayLabel').textContent = dayDate(t).toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' });
@@ -236,10 +245,16 @@ function render() {
     el.innerHTML = '<div class="empty">No habits yet.<br>Tap <strong>+</strong> to add one.</div>';
     return;
   }
-  // Habits that have started first, then those starting later (soonest first).
+  // Habits that have started first, then those starting later (soonest first), then finished ones (latest first,
+  // folded away under "Finished habits").
+  const current = state.habits.filter((h) => !ended(h, t)), finished = state.habits.filter((h) => ended(h, t)).sort((a, b) => b.end.localeCompare(a.end));
   const now = (h) => started(h, t) && firstDay(h) <= t;
-  const list = state.habits.filter(now).concat(state.habits.filter((h) => !now(h)).sort((a, b) => firstDay(a).localeCompare(firstDay(b))));
-  el.innerHTML = list.map((h) => habitCard(h, t)).join('');
+  const list = current.filter(now).concat(current.filter((h) => !now(h)).sort((a, b) => firstDay(a).localeCompare(firstDay(b))));
+  el.innerHTML = (list.length ? list.map((h) => habitCard(h, t)).join('') : '<div class="empty">No current habits.<br>Tap <strong>+</strong> to start a new one.</div>') +
+    (finished.length ? `<details class="finished-list"${showFinished ? ' open' : ''}><summary>🏁 Finished habits <span class="muted">(${finished.length})</span></summary>
+      ${finished.map((h) => habitCard(h, t)).join('')}</details>` : '');
+  const fl = $('.finished-list', el);
+  if (fl) fl.addEventListener('toggle', () => { showFinished = fl.open; });
   const habit = (id) => state.habits.find((x) => x.id === id);
   $$('[data-h]', el).forEach((b) => b.addEventListener('click', () => { const h = habit(b.dataset.h); if (h) toggle(h, b.dataset.d); }));
   $$('[data-edit]', el).forEach((b) => b.addEventListener('click', () => habitForm(b.dataset.edit)));
@@ -266,7 +281,7 @@ function moveMonth(id, k) {
   const h = state.habits.find((x) => x.id === id), t = today();
   if (!h) return;
   const next = addMonths((shownMonth[id] || t.slice(0, 7)) + '-01', k).slice(0, 7);
-  if (next < firstDay(h).slice(0, 7) || next > t.slice(0, 7)) return;
+  if (next < firstDay(h).slice(0, 7) || next > lastDay(h, t).slice(0, 7)) return;
   shownMonth[id] = next;
   render();
 }
@@ -349,6 +364,8 @@ function habitForm(id) {
       </div>
       <label>Start date<input id="hStart" type="date" required value="${esc(ex ? ex.date : today())}">
         <span class="hint">Today, or pick a past or future date. Days before it are greyed out and don't count against your streak or completion.</span></label>
+      <label>End date <span class="muted">(optional)</span><span class="end-row"><input id="hEnd" type="date" value="${esc(ex && ex.end ? ex.end : '')}"><button type="button" class="link-btn" id="hEndClear">Clear</button></span>
+        <span class="hint">Leave empty to keep it going. The end date is its last day; after that it moves to Finished habits, with its calendar, streaks and completion kept.</span></label>
       <button class="btn" type="submit" id="hSave">${ex ? 'Save' : 'Add habit'}</button>
       ${ex ? '<button class="btn danger" type="button" id="hDel">Delete habit</button>' : ''}
     </form>`);
@@ -411,12 +428,16 @@ function habitForm(id) {
   showFreq();
   showKind();
   if (!ex) setTimeout(() => $('#hName').focus(), 50);
+  $('#hEndClear').addEventListener('click', () => { $('#hEnd').value = ''; });
 
   $('#hForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     let name = $('#hName').value.trim();
     const date = $('#hStart').value;
     if (!isISO(date)) return toast('Pick a start date');
+    const end = $('#hEnd').value;
+    if (end && !isISO(end)) return toast('Pick an end date, or clear it');
+    if (end && end < date) return toast('The end date can\'t be before the start date');
     let data;
     if (kind === 'manual') {
       const target = freq === 'daily' ? 1 : Math.round(+$('#hTarget').value);
@@ -434,12 +455,13 @@ function habitForm(id) {
       if (!name) name = rule.defaultName(o, target, wordFor(period, o), src);
       data = { name, kind, freq: f, target, date, rule: Object.assign({ id: rule.id }, o) };
     }
-    if (ex) { Object.assign(ex, data); if (kind === 'manual') delete ex.rule; }
+    if (end) data.end = end;
+    if (ex) { Object.assign(ex, data); if (kind === 'manual') delete ex.rule; if (!end) delete ex.end; }
     else state.habits.push(Object.assign({ id: uid() }, data));
     await save();
     closeSheet();
     render();
-    toast(ex ? 'Saved' : date > today() ? `Added — starts on ${niceDate(date)}` : 'Habit added');
+    toast(end && end < today() ? 'Saved — moved to Finished habits' : ex ? 'Saved' : date > today() ? `Added — starts on ${niceDate(date)}` : 'Habit added');
   });
   if (ex) $('#hDel').addEventListener('click', async () => {
     if (!confirm(`Delete “${ex.name}”${isLinked(ex) ? '' : ' and every day ticked for it'}? (Nothing in other modules is changed.)`)) return;
