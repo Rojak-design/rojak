@@ -3,7 +3,8 @@
 
    Kept in the same on-phone database as everything else (IndexedDB, see store.js), but apart from the modules'
    data, so the main backup stays small and restoring a module never touches photos:
-     'photos:index'   { items: [{ id, date: 'YYYY-MM-DD', takenAt (ISO or null), addedAt (ISO), savedAt, bytes }] }
+     'photos:index'   { items: [{ id, date: 'YYYY-MM-DD', takenAt (ISO or null), addedAt (ISO), savedAt, bytes, w, h }] }
+                      (w, h: the photo's shape, so the collage can show it whole)
      'photo:<id>'     { id, full: Blob (JPEG, longest side 1600px), thumb: Blob (JPEG, 480px) }
    "Delete all data" leaves photos alone; they have their own "Delete all photos" and "Back up photos".
 
@@ -106,9 +107,10 @@ const Photos = (() => {
         const when = await takenDate(file);
         const img = await decode(file);
         const full = await toJpeg(img, FULL, 0.82), thumb = await toJpeg(img, THUMB, 0.75);
+        const w = img.width || img.naturalWidth, h = img.height || img.naturalHeight;
         if (img.close) img.close();
         const id = newId(), now = new Date().toISOString();
-        const item = { id, date: when ? when.date : fallbackDay, takenAt: when ? when.at : null, addedAt: now, savedAt: now, bytes: full.size + thumb.size };
+        const item = { id, date: when ? when.date : fallbackDay, takenAt: when ? when.at : null, addedAt: now, savedAt: now, bytes: full.size + thumb.size, w, h };
         await dbSet('photo:' + id, { id, full, thumb });
         index.items.push(item);
         await saveIndex();
@@ -116,6 +118,15 @@ const Photos = (() => {
       } catch (err) { console.error('Photo not added:', err); }
     }
     return added;
+  }
+  // Photos added before sizes were saved: the collage measures them once and saves the size here.
+  let sizeTimer = 0;
+  function setSize(id, w, h) {
+    const x = items().find((y) => y.id === id);
+    if (!x || (x.w && x.h)) return;
+    x.w = w; x.h = h;
+    clearTimeout(sizeTimer);
+    sizeTimer = setTimeout(() => saveIndex().catch(() => {}), 500);
   }
   async function remove(id) {
     if (!index) await load();
@@ -225,9 +236,10 @@ const Photos = (() => {
         const full = new Blob([bytes], { type: 'image/jpeg' });
         const img = await decode(full);
         const thumb = await toJpeg(img, THUMB, 0.75);
+        const w = img.width || img.naturalWidth, h = img.height || img.naturalHeight;
         if (img.close) img.close();
         await dbSet('photo:' + ph.id, { id: ph.id, full, thumb });
-        index.items.push({ id: ph.id, date: ph.date, takenAt: ph.takenAt || null, addedAt: ph.addedAt || new Date().toISOString(), savedAt: new Date().toISOString(), bytes: full.size + thumb.size });
+        index.items.push({ id: ph.id, date: ph.date, takenAt: ph.takenAt || null, addedAt: ph.addedAt || new Date().toISOString(), savedAt: new Date().toISOString(), bytes: full.size + thumb.size, w, h });
         have.add(ph.id);
         added++;
       } catch (err) { console.error('Photo not restored:', err); }
@@ -236,5 +248,5 @@ const Photos = (() => {
     return { added, skipped };
   }
 
-  return { load, items, onDay, getPhoto, add, remove, removeAll, usage, backupFile, restoreFile, takenDate };
+  return { load, items, onDay, getPhoto, add, setSize, remove, removeAll, usage, backupFile, restoreFile, takenDate };
 })();
