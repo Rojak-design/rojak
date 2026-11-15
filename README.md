@@ -75,6 +75,7 @@ Violet, so it's easy to tell apart from Money and Fitness.
 - **Daily and weekly habits** show a small month calendar (Mon–Sun): filled squares for days done, grey squares before the start date, today outlined. Tap a day to tick or untick it. Weekly habits get a green ✓ at the end of each week that met the target (and "2/3" for this week so far). Tap ‹ › or swipe the calendar to look at earlier months (back to the month the habit started).
 - **Monthly habits** show Jan to Dec in one row of 12 squares: filled when that month's target was met (a number shows how many times so far when it wasn't), this month outlined, months before the start date grey. ‹ › switches year. Tap a month to tick or untick its days.
 - A habit with a future start date shows **Starts on [date]** until then.
+- An optional **end date** is a habit's last day (set it when adding or editing; **Clear** removes it). Until then the habit shows "until [date]". After it, the habit moves to **🏁 Finished habits** (folded away at the bottom, latest first), keeping its calendar, final and best streak and Done %. Nothing after the end date counts, the last week or month counts if its target was met part-way but isn't held against you if not, and finished habits no longer appear on the home screen.
 - Each habit shows its **streak** (days, weeks or months in a row that met the target; today / this week / this month only counts once it's met, and isn't a miss until it's over), its **best** streak and **Done %** (periods met ÷ periods finished since the start date). Weekly and monthly habits also show this week's or month's progress, e.g. "2 of 3 this week".
 - Weeks run Monday to Sunday; months are calendar months. When the start date falls part-way through a week or month, that first week or month counts if you met the target but isn't held against you if you didn't.
 
@@ -90,7 +91,7 @@ Violet, so it's easy to tell apart from Money and Fitness.
   - **Water – bottles of water a day**: from the bottles on the home screen, e.g. "Drink at least 5 bottles a day" (target up to 5, in halves). Checked over each **day**: a day is done (filled in on the calendar) when you reached the target; it counts with the daily habits on the home screen's Habits card.
   - New rules (for future modules) are added in `habits/rules.js`: one entry each, described at the top of that file.
 
-Saved in the shared store under `mod:habits`, every entry with a date: `habits` (`{name, kind: 'manual'|'linked', freq: daily|weekly|monthly, target, date (start date), rule (linked: {id, …choices such as cats or accounts})}`), `checks` (`{habitId, date}`, one per day ticked).
+Saved in the shared store under `mod:habits`, every entry with a date: `habits` (`{name, kind: 'manual'|'linked', freq: daily|weekly|monthly, target, date (start date), end (optional last day), rule (linked: {id, …choices such as cats or accounts})}`), `checks` (`{habitId, date}`, one per day ticked).
 
 ## Publish with GitHub Pages
 1. On GitHub, open this repository → **Settings** → **Pages**.

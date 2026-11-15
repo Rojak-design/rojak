@@ -34,6 +34,10 @@ const HabitsEngine = (() => {
   const kindOf = (h) => (h.freq === 'weekly' ? 'week' : h.freq === 'daily' ? 'day' : 'month');
   const targetOf = (h) => (isLinked(h) ? Math.max(0, +h.target || 0) : h.freq === 'daily' ? 1 : Math.max(1, +h.target || 1));
   const started = (h, t = today()) => h.date <= t;
+  // An end date (optional) is the habit's last day; after it, the habit is finished and its record is kept.
+  const ended = (h, t = today()) => !!(h.end && h.end < t);
+  // The last day that counts so far: today, or the end date once it has passed.
+  const lastDay = (h, t = today()) => (ended(h, t) ? h.end : t);
   const atMost = (h) => { const r = ruleOf(h); return !!(r && r.atMost); };
   // What a period is called: day, week, month, or (Money) pay cycle / card statement.
   const periodWord = (h) => (h.freq === 'weekly' ? 'week' : h.freq === 'daily' ? 'day' : spanOf(h, today()).word || 'month');
@@ -66,6 +70,7 @@ const HabitsEngine = (() => {
   function doneDays(h, from, to) {
     const f = firstDay(h);
     if (from < f) from = f;
+    if (h.end && to > h.end) to = h.end;
     if (isLinked(h) && h.freq === 'daily') {
       const out = new Set();
       for (let d = from; d <= to; d = addDays(d, 1)) if (isDone(h, d)) out.add(d);
@@ -79,7 +84,9 @@ const HabitsEngine = (() => {
   // status: 'met'      the target was reached (a limit: the period ended at or under it)
   //         'missed'   the period is over and the target wasn't reached (a limit: it went over, even part-way through)
   //         'open'     today is in it and it's not decided yet (not counted)
-  //         'partial'  the first period began before the start date and wasn't met (not counted)
+  //         'partial'  the first period began before the start date and wasn't met (not counted), or the
+  //                    habit ended part-way through the last one and it wasn't met
+  // A finished habit (its end date has passed) stops at the end date: nothing after it counts.
   // Some linked rules work out each period's target themselves (e.g. what's needed to pay off a loan in time).
   // Rules that compare balances (wholePeriod) always measure a whole week / month / pay cycle, from the balance at
   // the end of the day before it began; when that balance isn't known (the accounts were added part-way through),
@@ -88,23 +95,26 @@ const HabitsEngine = (() => {
   function periods(h, t = today()) {
     const out = [];
     const first = firstDay(h), r = ruleOf(h), limit = atMost(h);
-    if (!started(h, t) || first > t) return out;
+    const closed = ended(h, t), u = lastDay(h, t);
+    if (!started(h, t) || first > u) return out;
     const whole = !!(r && r.wholePeriod && ruleReady(r));
     const known = whole && r.dataStart ? r.dataStart(src, h.rule) : '';
-    for (let p = spanOf(h, first); p.start <= t; p = spanOf(h, addDays(p.end, 1))) {
+    for (let p = spanOf(h, first); p.start <= u; p = spanOf(h, addDays(p.end, 1))) {
       const nodata = whole && p.start < known;
-      const value = nodata ? 0 : measure(h, whole || p.start >= first ? p.start : first, p.end < t ? p.end : t).value;
+      const value = nodata ? 0 : measure(h, whole || p.start >= first ? p.start : first, p.end < u ? p.end : u).value;
+      const open = !closed && p.end >= t, cut = closed && p.end > u; // cut: the habit ended part-way through it
       const target = r && r.targetFor && ruleReady(r) ? r.targetFor(src, h.rule, p) : targetOf(h);
       let status;
       if (nodata) status = 'partial';
-      else if (limit) status = value > target ? (p.start < first ? 'partial' : 'missed') : p.end >= t ? 'open' : 'met';
-      else if (r && r.judgeAtEnd && p.end >= t) status = 'open';
+      else if (limit) status = value > target ? (p.start < first ? 'partial' : 'missed') : open ? 'open' : 'met';
+      else if (cut) status = value >= target ? 'met' : 'partial';
+      else if (r && r.judgeAtEnd && open) status = 'open';
       else if (whole) status = value >= target ? 'met' : 'missed';
       else if (value >= target) status = 'met';
-      else if (p.end >= t) status = 'open';
+      else if (open) status = 'open';
       else if (p.start < first) status = 'partial';
       else status = 'missed';
-      out.push(Object.assign({}, p, { value, target, status, nodata }));
+      out.push(Object.assign({}, p, { value, target, status, nodata, cut }));
     }
     return out;
   }
@@ -114,9 +124,10 @@ const HabitsEngine = (() => {
     let met = 0, missed = 0, run = 0, best = 0;
     for (const p of ps) {
       if (p.status === 'met') { met++; run++; best = Math.max(best, run); }
-      else if (p.status === 'missed' || p.status === 'partial') { if (p.status === 'missed') missed++; run = 0; }
+      else if (p.status === 'missed' || (p.status === 'partial' && !p.cut)) { if (p.status === 'missed') missed++; run = 0; }
     }
-    // `run` is now the streak: an open period at the end doesn't break it.
+    // `run` is now the streak: an open period at the end doesn't break it, nor does a last period the habit's end
+    // date cut short.
     const counted = met + missed;
     return { periods: ps, current: ps[ps.length - 1] || null, streak: run, best, met, counted, pct: counted ? Math.round((met / counted) * 100) : null };
   }
@@ -151,7 +162,7 @@ const HabitsEngine = (() => {
   //   savings (judged when the period ends): below the target now;
   //   payments due (loan): still to pay with a week or less left.
   function atRisk(h, t = today()) {
-    if (h.freq === 'daily' || !started(h, t)) return null;
+    if (h.freq === 'daily' || !started(h, t) || ended(h, t)) return null;
     const p = stats(h, t).current;
     if (!p || p.nodata || p.status === 'met') return null;
     const r = ruleOf(h), left = daysBetween(t, p.end) + 1; // days left, today included
@@ -172,16 +183,17 @@ const HabitsEngine = (() => {
   }
   // Everything the home screen shows: daily habits done today, and habits at risk this week / month.
   function summary(t = today()) {
-    const live = state.habits.filter((h) => started(h, t) && firstDay(h) <= t);
+    const live = state.habits.filter((h) => started(h, t) && firstDay(h) <= t && !ended(h, t));
     const daily = live.filter((h) => h.freq === 'daily');
     const done = daily.filter((h) => isDone(h, t));
     const risks = [];
     for (const h of live) { const x = atRisk(h, t); if (x) risks.push(Object.assign({ habit: h, icon: isLinked(h) && ruleOf(h) ? ruleOf(h).icon : '🌱', period: periodWord(h) }, x)); }
     const metNow = live.filter((h) => h.freq !== 'daily' && (stats(h, t).current || {}).status === 'met').length;
-    return { count: state.habits.length, live: live.length, daily: daily.length, doneToday: done.length,
+    const upcoming = state.habits.filter((h) => !ended(h, t) && !(started(h, t) && firstDay(h) <= t)).map(firstDay).sort();
+    return { count: state.habits.length, live: live.length, nextStart: upcoming[0] || '', finished: state.habits.filter((h) => ended(h, t)).length, daily: daily.length, doneToday: done.length,
       notDone: daily.filter((h) => !isDone(h, t)), risks, metNow, others: live.length - daily.length };
   }
 
-  return { use, today, FREQS, freqOf, isLinked, ruleOf, ruleReady, kindOf, targetOf, started, atMost, periodWord, usesCycles,
+  return { use, today, FREQS, freqOf, isLinked, ruleOf, ruleReady, kindOf, targetOf, started, ended, lastDay, atMost, periodWord, usesCycles,
     spanOf, firstDay, measure, doneDays, periods, stats, plural, freqText, progressText, isDone, atRisk, summary };
 })();
