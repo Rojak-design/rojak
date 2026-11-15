@@ -365,3 +365,6 @@ a.btn { text-decoration: none; box-sizing: border-box; }
 .due-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid var(--line); }
 .due-row .left { flex: 1; min-width: 0; }
 .due-row .left > div:first-child { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.acc-filter { margin: 0 0 12px; }
+.acc-filter .chip { font-weight: 600; }
+.acc-filter .chip.on { background: var(--primary-soft); color: var(--primary); }
