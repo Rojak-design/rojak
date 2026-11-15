@@ -158,14 +158,38 @@ function planFab() {
   else recurringSheet();
 }
 
-// Account filter for the Recurring list: 'all', 'cards', 'banks' or an account id.
+// Account filters (Recurring and Forecast): 'all', 'cards', 'banks' or an account id.
 let recAccFilter = 'all';
+let fcAccFilter = 'all';
+let fcFilterHtml = '';
+function accMatches(filter, id) {
+  if (filter === 'all') return true;
+  if (filter === 'cards') return isCard(id);
+  if (filter === 'banks') return !!accountById(id) && !isCard(id);
+  return id === filter;
+}
+const validAccFilter = (f) => (['all', 'cards', 'banks'].includes(f) || accountById(f) ? f : 'all');
+function accFilterHtml(id) {
+  return `<select id="${id}" aria-label="Filter by account" style="margin-bottom:12px">
+    <option value="all">All accounts</option>
+    ${cardAccounts().length ? '<option value="cards">💳 All credit cards</option>' : ''}
+    ${cardAccounts().length && bankAccounts().length ? '<option value="banks">🏦 All bank accounts</option>' : ''}
+    ${accountOptions()}</select>`;
+}
 function recMatchesAcc(r) {
-  if (recAccFilter === 'all') return true;
-  const ids = [r.accountId, r.type === 'transfer' ? r.toAccountId : null].filter(Boolean);
-  if (recAccFilter === 'cards') return ids.some(isCard);
-  if (recAccFilter === 'banks') return ids.some((id) => accountById(id) && !isCard(id));
-  return ids.includes(recAccFilter);
+  return [r.accountId, r.type === 'transfer' ? r.toAccountId : null].filter(Boolean).some((id) => accMatches(recAccFilter, id));
+}
+// Runs fn with only the chosen accounts' data in `state` (accounts, their transactions and recurring payments).
+// Transfers between your accounts and trips (not tied to an account) are left out.
+function withAccounts(filter, fn) {
+  if (filter === 'all') return fn();
+  const real = state;
+  const accounts = real.accounts.filter((a) => accMatches(filter, a.id));
+  const ids = new Set(accounts.map((a) => a.id));
+  state = { ...real, accounts, trips: [],
+    transactions: real.transactions.filter((t) => ids.has(t.accountId)),
+    recurring: real.recurring.filter((r) => r.type !== 'transfer' && ids.has(r.accountId)) };
+  try { return fn(); } finally { state = real; }
 }
 function renderRecurring() {
   const el = $('#plan-recurring');
@@ -173,12 +197,8 @@ function renderRecurring() {
     el.innerHTML = `<div class="empty">No recurring payments yet.<br>Tap + to add instalments, loan repayments, subscriptions, rent, salary…</div>`;
     return;
   }
-  if (!['all', 'cards', 'banks'].includes(recAccFilter) && !accountById(recAccFilter)) recAccFilter = 'all';
-  const filterHtml = `<select id="recAccFilter" aria-label="Filter by account" style="margin-bottom:12px">
-    <option value="all">All accounts</option>
-    ${cardAccounts().length ? '<option value="cards">💳 All credit cards</option>' : ''}
-    ${cardAccounts().length && bankAccounts().length ? '<option value="banks">🏦 All bank accounts</option>' : ''}
-    ${accountOptions()}</select>`;
+  recAccFilter = validAccFilter(recAccFilter);
+  const filterHtml = accFilterHtml('recAccFilter');
   const list = state.recurring.filter(recMatchesAcc);
   const t = today();
   const soon = [];
@@ -909,12 +929,28 @@ function forecast() {
 let fcSelected = 0;
 
 function renderForecast() {
+  fcAccFilter = validAccFilter(fcAccFilter);
+  // With an account chosen, the whole forecast (history, recurring payments, card bills, bank balance) uses
+  // only that account's (or those accounts') data.
+  // The filter is built from all accounts, before the data is narrowed down.
+  fcFilterHtml = state.accounts.length > 1 || fcAccFilter !== 'all' ? accFilterHtml('fcAccFilter') + (fcAccFilter === 'all' ? ''
+    : `<p class="muted small" style="margin:-4px 0 12px">Only ${fcAccFilter === 'cards' ? 'your credit cards' : fcAccFilter === 'banks' ? 'your bank accounts'
+      : esc(accountName(fcAccFilter))}: their own spending, income and recurring payments. Transfers between your accounts and trip estimates aren't included.</p>`) : '';
+  withAccounts(fcAccFilter, renderForecastFor);
+  const sel = $('#fcAccFilter');
+  if (sel) {
+    sel.value = fcAccFilter;
+    sel.addEventListener('change', (e) => { fcAccFilter = e.target.value; renderForecast(); });
+  }
+}
+function renderForecastFor() {
   const el = $('#plan-forecast');
   const f = forecast();
   const { rows } = f;
   const word = periodWord();
+  const filterHtml = fcFilterHtml;
   if (!f.n && !state.recurring.length) {
-    el.innerHTML = `<div class="empty">Nothing to forecast yet.<br>Log some spending (History) or add recurring payments, and your 12-${word} forecast will appear here.</div>`;
+    el.innerHTML = filterHtml + `<div class="empty">Nothing to forecast ${fcAccFilter === 'all' ? 'yet' : 'for this account'}.<br>Log some spending (History) or add recurring payments, and your 12-${word} forecast will appear here.</div>`;
     return;
   }
   const total = f.future.reduce((s, r) => s + r.spend, 0);
@@ -932,7 +968,7 @@ function renderForecast() {
     : 'Each bar is a calendar month. Set your payday under Settings to see pay cycles instead.';
 
   const view = state.settings.fcView || 'spending';
-  let html = `
+  let html = filterHtml + `
     <div class="controls">
       <label>History to use (${word}s)
         <select id="fcLookback">${[3, 6, 12].map((v) => `<option value="${v}">Last ${v}</option>`).join('')}</select></label>
