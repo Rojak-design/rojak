@@ -318,3 +318,8 @@ label.imported input { border-color: var(--primary); }
 .link-item .link-like { flex: 1; min-width: 0; text-align: left; background: none; border: 0; padding: 0; font: inherit; color: inherit; cursor: pointer; }
 .link-item .sub { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .link-item .order { display: flex; gap: 2px; }
+.own-icon { display: flex; align-items: center; gap: 8px; margin-top: 8px; font-size: 14px; }
+.own-icon input { width: 70px; text-align: center; font-size: 20px; padding: 6px; }
+#cIcons .chip { width: 40px; height: 40px; display: grid; place-items: center; font-size: 22px; line-height: 1; padding: 0; border-radius: 10px; border: 2px solid transparent; background: var(--bg); cursor: pointer; }
+#cIcons .chip.on { border-color: var(--primary); background: var(--primary-soft, var(--bg)); }
+label.own-icon { flex-direction: row; font-weight: 400; color: var(--muted); }

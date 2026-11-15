@@ -32,7 +32,10 @@ const DEFAULT_CATS = [
   { id: 'swim', name: 'Swimming', icon: '🏊‍♀️', color: '#0284c7', words: ['swim', 'pool'] },
   { id: 'other', name: 'Other', icon: '💪', color: '#64748b', words: [] }
 ];
-const ICONS = ['🏋️‍♀️', '⚡', '🤸‍♀️', '🏃‍♀️', '🔥', '⏱️', '🛣️', '🏅', '🚴‍♀️', '🏊‍♀️', '🚶‍♀️', '🥾', '🧘‍♀️', '🤾‍♀️', '🚣‍♀️', '🧗‍♀️', '⛹️‍♀️', '🤽‍♀️', '🏄‍♀️', '⛷️', '💃', '🥊', '🎾', '⚽', '🏸', '❤️', '💪', '⭐'];
+const ICONS = ['🏋️‍♀️', '⚡', '🤸‍♀️', '🏃‍♀️', '🔥', '⏱️', '🛣️', '🏅', '🚴‍♀️', '🏊‍♀️', '🚶‍♀️', '🥾', '🧘‍♀️', '🤾‍♀️', '🚣‍♀️', '🧗‍♀️', '⛹️‍♀️', '🤽‍♀️', '🏄‍♀️', '⛷️', '💃', '🥊', '🎾', '⚽', '🏸', '🛷', '🎽', '🏟️', '🏁', '🥇', '🏆', '❤️', '💪', '⭐'];
+// One emoji typed or pasted as an icon (letters and numbers aren't icons).
+const oneEmoji = (v) => { const t = [...new Intl.Segmenter(undefined, { granularity: 'grapheme' }).segment(String(v || '').trim())].map((x) => x.segment);
+  return t.length === 1 && /\p{Extended_Pictographic}/u.test(t[0]) ? t[0] : null; };
 // The icons of the first version, swapped for the female ones.
 const FEMALE = { '🏋️': '🏋️‍♀️', '🤸': '🤸‍♀️', '🏃': '🏃‍♀️', '🚴': '🚴‍♀️', '🏊': '🏊‍♀️', '🚶': '🚶‍♀️', '🧘': '🧘‍♀️', '🧗': '🧗‍♀️', '🚣': '🚣‍♀️' };
 const COLORS = ['#ea580c', '#dc2626', '#db2777', '#9333ea', '#2563eb', '#0284c7', '#0891b2', '#0d9488', '#16a34a', '#65a30d', '#ca8a04', '#d97706', '#64748b'];
@@ -436,7 +439,8 @@ function catSheet(id) {
   let icon = c ? c.icon : '💪', color = c ? c.color : COLORS[state.categories.length % COLORS.length];
   openSheet(c ? 'Edit category' : 'New category', `<form class="form" id="cForm" novalidate>
       <label>Name <input id="cName" value="${esc(c ? c.name : '')}" placeholder="e.g. Hyrox" autocomplete="off"></label>
-      <div><div class="label-t">Icon</div><div class="chips" id="cIcons">${ICONS.map((x) => `<button type="button" class="chip${x === icon ? ' on' : ''}" data-icon="${x}">${x}</button>`).join('')}</div></div>
+      <div><div class="label-t">Icon</div><div class="chips" id="cIcons">${ICONS.map((x) => `<button type="button" class="chip${x === icon ? ' on' : ''}" data-icon="${x}">${x}</button>`).join('')}</div>
+        <label class="own-icon">Or type any emoji <input id="cOwnIcon" value="${ICONS.includes(icon) ? '' : esc(icon)}" placeholder="e.g. 🏟️" autocomplete="off" aria-label="Your own icon (one emoji)"></label></div>
       <div><div class="label-t">Colour</div><div class="chips" id="cColors">${COLORS.map((x) => `<button type="button" class="swatch${x === color ? ' on' : ''}" data-color="${x}" style="background:${x}" aria-label="Colour ${x}"></button>`).join('')}</div></div>
       <label>Words in an activity's name <span class="hint">separated by commas</span>
         <textarea id="cWords" rows="2" placeholder="e.g. hyrox, sled">${esc(c ? (c.words || []).join(', ') : '')}</textarea></label>
@@ -444,13 +448,15 @@ function catSheet(id) {
       ${c && c.id !== 'other' ? `<button type="button" class="btn danger" id="cDel">Delete${used ? ` (${used} session${used > 1 ? 's' : ''} move to Other)` : ''}</button>` : ''}
       <button type="button" class="btn secondary" id="cBack">Back</button>
     </form>`);
-  $$('[data-icon]').forEach((b) => b.addEventListener('click', () => { icon = b.dataset.icon; $$('[data-icon]').forEach((x) => x.classList.toggle('on', x === b)); }));
+  $$('[data-icon]').forEach((b) => b.addEventListener('click', () => { icon = b.dataset.icon; $('#cOwnIcon').value = ''; $$('[data-icon]').forEach((x) => x.classList.toggle('on', x === b)); }));
+  $('#cOwnIcon').addEventListener('input', () => { const e = oneEmoji($('#cOwnIcon').value); if (e) { icon = e; $$('[data-icon]').forEach((x) => x.classList.toggle('on', x.dataset.icon === e)); } });
   $$('[data-color]').forEach((b) => b.addEventListener('click', () => { color = b.dataset.color; $$('[data-color]').forEach((x) => x.classList.toggle('on', x === b)); }));
   $('#cBack').addEventListener('click', catsSheet);
   $('#cForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const name = $('#cName').value.trim();
     if (!name) return toast('Give it a name');
+    if ($('#cOwnIcon').value.trim() && !oneEmoji($('#cOwnIcon').value)) return toast('Type one emoji as the icon');
     if (state.categories.some((x) => x !== c && sameName(x.name, name))) return toast('There is already a category with that name');
     const words = [...new Set($('#cWords').value.split(',').map((w) => w.trim().toLowerCase()).filter(Boolean))];
     if (c) Object.assign(c, { name, icon, color, words });
