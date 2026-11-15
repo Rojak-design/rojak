@@ -15,23 +15,36 @@ const Memories = (() => {
   const $m = (s) => document.querySelector(s);
   const reduceMotion = () => window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-  // Scrapbook layouts on a 6-column grid: [columns, rows] for each photo, for 1 to 7 photos. More than 7 photos
-  // repeat the layouts (e.g. 9 = the 7-photo layout, then the 2-photo one).
-  const PATTERNS = {
-    1: [[6, 4]],
-    2: [[3, 4], [3, 4]],
-    3: [[4, 4], [2, 2], [2, 2]],
-    4: [[4, 3], [2, 3], [2, 3], [4, 3]],
-    5: [[3, 4], [3, 2], [3, 2], [2, 2], [4, 2]],
-    6: [[4, 4], [2, 2], [2, 2], [2, 2], [2, 2], [2, 2]],
-    7: [[2, 2], [4, 4], [2, 2], [3, 3], [3, 3], [2, 2], [4, 2]]
-  };
-  function layout(n) {
-    const out = [];
-    while (out.length < n) { const k = Math.min(7, n - out.length); out.push(...PATTERNS[k]); }
-    return out;
+  // Scrapbook layout that shows every photo whole: photos are placed in rows; each row's height is chosen so its
+  // photos, each keeping its own shape, fill the width exactly. Rows take turns being taller (fewer, bigger photos)
+  // and shorter (more, smaller ones), so the collage grows as tall as the day's photos need.
+  const GAP = 5, TARGETS = [0.66, 0.46, 0.56]; // row heights to aim for, as a share of the width
+  function justify(aspects, W) {
+    const rows = [];
+    let i = 0, r = 0;
+    while (i < aspects.length) {
+      const T = W * TARGETS[r % TARGETS.length], items = [];
+      let sum = 0, h = 0;
+      while (i < aspects.length) {
+        items.push(i); sum += aspects[i]; i++;
+        h = (W - GAP * (items.length - 1)) / sum;
+        if (h <= T) break;
+      }
+      rows.push({ items, h, sum });
+      r++;
+    }
+    // A last row with one photo that can't fill the width joins the row before it.
+    const last = rows[rows.length - 1];
+    if (rows.length > 1 && last.items.length === 1 && last.h > W * TARGETS[(rows.length - 1) % TARGETS.length] * 1.25) {
+      rows.pop();
+      const prev = rows[rows.length - 1];
+      prev.items.push(last.items[0]); prev.sum += last.sum;
+      prev.h = (W - GAP * (prev.items.length - 1)) / prev.sum;
+    }
+    // Too few photos to fill the width without being huge (e.g. one tall photo): keep it a sensible size, centred.
+    for (const row of rows) { row.centred = row.h > W * 0.9; if (row.centred) row.h = W * 0.9; }
+    return rows;
   }
-
   let day = todayIso();
   let urls = [];      // thumbnail links shown now (released when the day changes)
   let viewUrls = [];  // full-size links in the full-screen view
@@ -46,32 +59,56 @@ const Memories = (() => {
     $m('#memSub').textContent = list.length ? `${list.length} photo${list.length > 1 ? 's' : ''}` : day === t ? 'Today' : '';
     $m('#memNext').disabled = day >= t;
     $m('#memToday').classList.toggle('hidden', day === t);
-    urls.forEach((u) => URL.revokeObjectURL(u));
+    // The previous day's pictures are released once this day's are shown (no broken pictures in between).
+    const old = urls;
     urls = [];
+    const release = () => old.forEach((u) => URL.revokeObjectURL(u));
     const grid = $m('#memGrid');
     if (!list.length) {
       grid.className = 'mem-empty';
       grid.innerHTML = `<div class="mem-empty-art">🌤️</div><p>No photos for this day yet.<br>Add a few memories?</p>
         <button type="button" class="btn mem-add-big" data-add>+ Add photos</button>`;
       $m('#memAdd').classList.add('hidden');
+      tiles = [];
+      release();
     } else {
       grid.className = 'mem-grid';
-      const sizes = layout(list.length);
-      grid.innerHTML = list.map((x, i) => `<button type="button" class="mem-tile" data-i="${i}" style="grid-column:span ${sizes[i][0]};grid-row:span ${sizes[i][1]}"
-        aria-label="Photo ${i + 1} of ${list.length}${x.takenAt ? `, taken ${new Date(x.takenAt).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}` : ''}"></button>`).join('');
       $m('#memAdd').classList.remove('hidden');
-      // Thumbnails load after the grid is in place.
-      const stamp = day;
-      for (const [i, x] of list.entries()) {
+      // Load the previews and each photo's shape, then lay them out.
+      const stamp = day, shown = [];
+      for (const x of list) {
         const p = await Photos.getPhoto(x.id);
-        if (stamp !== day) return; // moved to another day meanwhile
-        const tile = grid.querySelector(`[data-i="${i}"]`);
-        if (!p || !tile) continue;
+        if (stamp !== day) { release(); return; } // moved to another day meanwhile
+        if (!p) continue;
         const u = URL.createObjectURL(p.thumb || p.full);
         urls.push(u);
-        tile.innerHTML = `<img src="${u}" alt="" draggable="false">`;
+        let a = x.w && x.h ? x.w / x.h : 0;
+        if (!a) {
+          const img = new Image(); img.src = u;
+          try { await img.decode(); a = img.naturalWidth / img.naturalHeight; Photos.setSize(x.id, img.naturalWidth, img.naturalHeight); } catch { a = 1; }
+          if (stamp !== day) return;
+        }
+        shown.push({ x, u, a: Math.max(0.3, Math.min(3.5, a || 1)) });
       }
+      tiles = shown;
+      arrange();
+      release();
     }
+  }
+  // Lays out the current day's photos for the collage's width (again when the width changes).
+  let tiles = [], laidOutFor = 0;
+  function arrange() {
+    const grid = $m('#memGrid');
+    const W = grid.clientWidth;
+    if (!W || !tiles.length || grid.className !== 'mem-grid') return;
+    laidOutFor = W;
+    const rows = justify(tiles.map((t) => t.a), W), n = tiles.length;
+    grid.innerHTML = rows.map((row) => `<div class="mem-row${row.centred ? ' centred' : ''}" style="height:${row.h.toFixed(1)}px">${row.items.map((i) => {
+      const t = tiles[i], when = t.x.takenAt ? `, taken ${new Date(t.x.takenAt).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}` : '';
+      // The last photo in a full row takes up any rounding left over, so the row's edges line up.
+      const w = row.centred ? t.a * row.h : null;
+      return `<button type="button" class="mem-tile" data-i="${i}" style="${w ? `width:${w.toFixed(1)}px` : `flex:${t.a.toFixed(4)} 1 0`}" aria-label="Photo ${i + 1} of ${n}${when}"><img src="${t.u}" alt="" draggable="false"></button>`;
+    }).join('')}</div>`).join('');
   }
   function go(newDay) {
     const t = todayIso();
@@ -188,6 +225,7 @@ const Memories = (() => {
       if (tile) openView(+tile.dataset.i);
     });
     onSwipe($m('#memGrid'), slide);
+    if (window.ResizeObserver) new ResizeObserver(() => { if ($m('#memGrid').clientWidth !== laidOutFor) arrange(); }).observe($m('#memGrid'));
     $m('#memFiles').addEventListener('change', (e) => addFiles(e.target));
     $m('#memCamera').addEventListener('change', (e) => addFiles(e.target));
     // Full screen
