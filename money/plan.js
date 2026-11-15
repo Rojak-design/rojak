@@ -158,31 +158,48 @@ function planFab() {
   else recurringSheet();
 }
 
-// Account filters (Recurring and Forecast): 'all', 'cards', 'banks' or an account id.
-let recAccFilter = 'all';
-let fcAccFilter = 'all';
+// Account filters (Recurring and Forecast): the account ids picked (any number); none picked = all accounts.
+let recAccFilter = [];
+let fcAccFilter = [];
 let fcFilterHtml = '';
-function accMatches(filter, id) {
-  if (filter === 'all') return true;
-  if (filter === 'cards') return isCard(id);
-  if (filter === 'banks') return !!accountById(id) && !isCard(id);
-  return id === filter;
+const accMatches = (filter, id) => !filter.length || filter.includes(id);
+const validAccFilter = (f) => f.filter((id) => accountById(id));
+const sameIds = (a, b) => a.length === b.length && a.every((x) => b.includes(x));
+// Chips: All, shortcuts for all cards / all bank accounts, then each account (tap to add or remove it).
+function accFilterHtml(id, filter) {
+  if (state.accounts.length < 2) return '';
+  const cards = cardAccounts().map((a) => a.id), banks = bankAccounts().map((a) => a.id);
+  const chip = (val, label, on) => `<button type="button" class="chip${on ? ' on' : ''}" data-af="${val}" aria-pressed="${on}">${label}</button>`;
+  return `<div class="chips acc-filter" id="${id}" role="group" aria-label="Filter by account">
+    ${chip('all', 'All accounts', !filter.length)}
+    ${cards.length && banks.length ? chip('cards', '💳 All cards', sameIds(filter, cards)) + chip('banks', '🏦 All banks', sameIds(filter, banks)) : ''}
+    ${state.accounts.map((a) => chip(a.id, `${a.type === 'credit' ? '💳 ' : ''}${esc(a.name)}`, filter.includes(a.id))).join('')}
+  </div>`;
 }
-const validAccFilter = (f) => (['all', 'cards', 'banks'].includes(f) || accountById(f) ? f : 'all');
-function accFilterHtml(id) {
-  return `<select id="${id}" aria-label="Filter by account" style="margin-bottom:12px">
-    <option value="all">All accounts</option>
-    ${cardAccounts().length ? '<option value="cards">💳 All credit cards</option>' : ''}
-    ${cardAccounts().length && bankAccounts().length ? '<option value="banks">🏦 All bank accounts</option>' : ''}
-    ${accountOptions()}</select>`;
+// Tapping a chip: All clears the filter, a shortcut picks just that group, an account is added or removed.
+function bindAccFilter(id, filter, set) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.querySelectorAll('[data-af]').forEach((b) => b.addEventListener('click', () => {
+    const v = b.dataset.af;
+    let next;
+    if (v === 'all') next = [];
+    else if (v === 'cards') next = cardAccounts().map((a) => a.id);
+    else if (v === 'banks') next = bankAccounts().map((a) => a.id);
+    else next = filter.includes(v) ? filter.filter((x) => x !== v) : [...filter, v];
+    if (next.length === state.accounts.length) next = []; // every account picked = all
+    set(next);
+  }));
 }
+// "UOB, UOB CC" — the accounts a filter picks.
+const accFilterNames = (filter) => filter.map((id) => esc(accountName(id))).join(', ');
 function recMatchesAcc(r) {
   return [r.accountId, r.type === 'transfer' ? r.toAccountId : null].filter(Boolean).some((id) => accMatches(recAccFilter, id));
 }
 // Runs fn with only the chosen accounts' data in `state` (accounts, their transactions and recurring payments).
 // Transfers between your accounts and trips (not tied to an account) are left out.
 function withAccounts(filter, fn) {
-  if (filter === 'all') return fn();
+  if (!filter.length) return fn();
   const real = state;
   const accounts = real.accounts.filter((a) => accMatches(filter, a.id));
   const ids = new Set(accounts.map((a) => a.id));
@@ -198,7 +215,7 @@ function renderRecurring() {
     return;
   }
   recAccFilter = validAccFilter(recAccFilter);
-  const filterHtml = accFilterHtml('recAccFilter');
+  const filterHtml = accFilterHtml('recAccFilter', recAccFilter);
   const list = state.recurring.filter(recMatchesAcc);
   const t = today();
   const soon = [];
@@ -212,7 +229,7 @@ function renderRecurring() {
   // Which account a payment uses (shown when the list isn't narrowed to one account).
   const accTag = (r) => (r.type === 'transfer' || !accountById(r.accountId) ? ''
     : `${isCard(r.accountId) ? '💳 ' : ''}${esc(accountName(r.accountId))}`);
-  const showAcc = !accountById(recAccFilter);
+  const showAcc = recAccFilter.length !== 1;
   const perMonth = (type) => active.filter((r) => r.type === type).reduce((s, r) => s + monthlyEquivalent(r), 0);
   // How a recurring amount is shown: + for income, − for spending, ⇄ for a transfer between your accounts.
   const shownAmt = (r, amt) => (r.type === 'transfer' ? `⇄ ${money(amt)}` : money(r.type === 'income' ? amt : -amt, true));
@@ -243,12 +260,10 @@ function renderRecurring() {
   };
   html += `<h2 class="section-title">Active</h2><div class="list">${active.map(item).join('') || '<div class="empty">Nothing active.</div>'}</div>`;
   if (done.length) html += `<h2 class="section-title">Finished</h2><div class="list">${done.map(item).join('')}</div>`;
-  if (!list.length) html = filterHtml + dueCardHtml() + `<div class="empty">No recurring payments on this account.</div>`;
+  if (!list.length) html = filterHtml + dueCardHtml() + `<div class="empty">No recurring payments on these accounts.</div>`;
   el.innerHTML = html;
   bindDueCard(el);
-  const fsel = $('#recAccFilter');
-  fsel.value = recAccFilter;
-  fsel.addEventListener('change', (e) => { recAccFilter = e.target.value; renderRecurring(); });
+  bindAccFilter('recAccFilter', recAccFilter, (f) => { recAccFilter = f; renderRecurring(); });
   el.querySelectorAll('[data-recur]').forEach((b) => b.addEventListener('click', () => recurringSheet(b.dataset.recur)));
 }
 
@@ -933,15 +948,10 @@ function renderForecast() {
   // With an account chosen, the whole forecast (history, recurring payments, card bills, bank balance) uses
   // only that account's (or those accounts') data.
   // The filter is built from all accounts, before the data is narrowed down.
-  fcFilterHtml = state.accounts.length > 1 || fcAccFilter !== 'all' ? accFilterHtml('fcAccFilter') + (fcAccFilter === 'all' ? ''
-    : `<p class="muted small" style="margin:-4px 0 12px">Only ${fcAccFilter === 'cards' ? 'your credit cards' : fcAccFilter === 'banks' ? 'your bank accounts'
-      : esc(accountName(fcAccFilter))}: their own spending, income and recurring payments. Transfers between your accounts and trip estimates aren't included.</p>`) : '';
+  fcFilterHtml = accFilterHtml('fcAccFilter', fcAccFilter) + (fcAccFilter.length
+    ? `<p class="muted small" style="margin:-4px 0 12px">Only ${accFilterNames(fcAccFilter)}: their own spending, income and recurring payments. Transfers between your accounts and trip estimates aren't included.</p>` : '');
   withAccounts(fcAccFilter, renderForecastFor);
-  const sel = $('#fcAccFilter');
-  if (sel) {
-    sel.value = fcAccFilter;
-    sel.addEventListener('change', (e) => { fcAccFilter = e.target.value; renderForecast(); });
-  }
+  bindAccFilter('fcAccFilter', fcAccFilter, (f) => { fcAccFilter = f; renderForecast(); });
 }
 function renderForecastFor() {
   const el = $('#plan-forecast');
@@ -950,7 +960,7 @@ function renderForecastFor() {
   const word = periodWord();
   const filterHtml = fcFilterHtml;
   if (!f.n && !state.recurring.length) {
-    el.innerHTML = filterHtml + `<div class="empty">Nothing to forecast ${fcAccFilter === 'all' ? 'yet' : 'for this account'}.<br>Log some spending (History) or add recurring payments, and your 12-${word} forecast will appear here.</div>`;
+    el.innerHTML = filterHtml + `<div class="empty">Nothing to forecast ${fcAccFilter.length ? 'for these accounts' : 'yet'}.<br>Log some spending (History) or add recurring payments, and your 12-${word} forecast will appear here.</div>`;
     return;
   }
   const total = f.future.reduce((s, r) => s + r.spend, 0);
