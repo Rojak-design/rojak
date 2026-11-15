@@ -179,6 +179,9 @@ async function renderBackupInfo() {
     } catch { /* ignore */ }
   }
 }
+// The Habits card updates as soon as a water bottle is tapped (Water habits read the bottles).
+let lastHabits = null;
+Water.onChange(() => { if (lastHabits) { try { renderHabits(...lastHabits); } catch (err) { console.error(err); } } });
 async function refresh() {
   try {
     const water = await Water.load();
@@ -189,6 +192,7 @@ async function refresh() {
       const habits = await Rojak.load('habits');
       Water.setHabits(habits); // the bottles also celebrate when a Water habit's target is reached
       renderHabits(habits, { money, fitness, water });
+      lastHabits = [habits, { money, fitness, water }];
     } catch (err) {
       console.error(err);
       $('#habitsSummary').innerHTML = '<div class="muted small" style="grid-column:1/-1">Tap to open Habits.</div>';
