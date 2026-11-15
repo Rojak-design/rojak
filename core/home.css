@@ -23,6 +23,7 @@ body {
 .small { font-size: 13px; }
 .center { text-align: center; }
 .hidden { display: none !important; }
+.nowrap { white-space: nowrap; }
 h2 { margin: 0; font-size: 18px; }
 
 /* The header's bottom edge is the top edge of the Money card: she and the cat sit exactly on it. */
