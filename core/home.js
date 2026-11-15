@@ -139,11 +139,16 @@ function renderHabits(h, sources) {
     el.innerHTML = `<div class="muted small" style="grid-column:1/-1">Your habits start on ${esc(dayLabel(next))}.</div>`;
     return;
   }
-  const left = s.notDone.map((x) => x.name);
+  // Linked daily habits show how far along they are today, e.g. "Drink 2½ bottles of water a day (½ of 2½)".
+  const halves = (n) => { const r = Math.round(n * 2) / 2; return r % 1 ? `${Math.floor(r) || ''}½` : String(r); };
+  const t = HabitsEngine.today();
+  // (HTML: the progress in brackets is kept together on one line.)
+  const left = s.notDone.map((x) => esc(x.name) + (HabitsEngine.isLinked(x)
+    ? ` <span class="nowrap">(${halves(HabitsEngine.measure(x, t, t).value)} of ${halves(HabitsEngine.targetOf(x))})</span>` : ''));
   const risky = s.risks.slice(0, 4);
   el.innerHTML = `
-    <div class="stat"><div class="label">Today</div><div class="value">${s.daily ? `${s.doneToday}<small>/${s.daily}</small>` : '–'}</div>
-      <div class="sub">${!s.daily ? 'No daily habits' : left.length ? esc(`To do: ${left.slice(0, 3).join(', ')}${left.length > 3 ? ` +${left.length - 3}` : ''}`) : 'All done ✓'}</div></div>
+    <div class="stat"><div class="label">Daily habits done today</div><div class="value">${s.daily ? `${s.doneToday}<small>/${s.daily}</small>` : '–'}</div>
+      <div class="sub">${!s.daily ? 'No daily habits' : left.length ? `To do: ${left.slice(0, 3).join(', ')}${left.length > 3 ? ` +${left.length - 3}` : ''}` : 'All done ✓'}</div></div>
     <div class="stat"><div class="label">At risk</div><div class="value ${s.risks.length ? 'neg' : ''}">${s.others ? s.risks.length : '–'}</div>
       <div class="sub">${!s.others ? 'No weekly or monthly habits' : s.risks.length ? 'this week or month' : `All on track ✓${s.metNow ? ` · ${s.metNow} done` : ''}`}</div></div>
     ${risky.length ? `<div class="risks">${risky.map((x) => `<div class="risk${x.over ? ' over' : ''}"><span class="risk-icon">${esc(x.icon)}</span>
