@@ -235,7 +235,9 @@ async function parseWhoop(shot, rec) {
     // The biggest number in the few lines above (the % is sometimes read as "¢" or "°", or as a line of its own).
     const above = L.slice(Math.max(0, ri - 3), ri).filter((l) => /^\W*\d{1,3}(?!\d)/.test(l.text))
       .sort((p, q) => (q.y1 - q.y0) - (p.y1 - p.y0))[0];
-    const v = above ? firstNumber(above.text) : null;
+    let v = above ? firstNumber(above.text) : null;
+    // Over 100: the % was read as a digit ("55%" → "559", "100%" → "1009"), so it's left out.
+    while (v > 100 && Number.isInteger(v)) v = Math.floor(v / 10);
     if (v != null && v <= 100) put(rec, 'recoveryScore', v, 'Whoop', 'Whoop recovery');
   }
   // Last Night's Sleep: the hours of sleep are the big time just under "HOURS OF SLEEP" (the smaller one under it is
@@ -262,7 +264,10 @@ async function parseWhoop(shot, rec) {
     const txt = await readNumberAt(shot, lastLabelWord.x1 + 8, l.y0 - h * 0.6, shot.W, l.y1 + h * 0.6, key === 'sleepHours' ? '0123456789:hm ' : undefined);
     // The value on the label's own line, with look-alike letters as digits ("4a" → "44").
     const onLine = (l.text.slice(l.text.search(re)).replace(re, '').trim().split(/\s+/)[0] || '').replace(/[hALalIi|OoSsBZzbgq]/g, (ch) => LOOKALIKE[ch]);
-    const v = [firstNumber(txt, key === 'sleepHours'), firstNumber(onLine, key === 'sleepHours')].find((x) => fits(key, x));
+    // The reading with more digits wins (the enlarged one sometimes loses one: "94" → "9"); the enlarged one on a tie.
+    const digits = (x) => String(Math.round(x * 100)).length;
+    const v = [firstNumber(txt, key === 'sleepHours'), firstNumber(onLine, key === 'sleepHours')].filter((x) => fits(key, x))
+      .reduce((b, x) => (b == null || digits(x) > digits(b) ? x : b), null);
     if (v != null) put(rec, key, v, 'Whoop', note);
   }
 }
