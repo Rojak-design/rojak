@@ -268,6 +268,24 @@ function countChips(acts) {
   return Object.keys(n).sort((a, b) => order.indexOf(a) - order.indexOf(b)).map((id) => { const c = catOf(id);
     return `<span class="count-chip" style="--c:${c.color}">${c.icon} ${esc(c.name)} <strong>${n[id]}</strong></span>`; }).join('');
 }
+// Recovery as Whoop colours it: green 67%+, yellow 34–66%, red below.
+const recBand = (score) => (score == null ? '' : score >= 67 ? 'rec-g' : score >= 34 ? 'rec-y' : 'rec-r');
+const REC_WORD = { 'rec-g': 'green', 'rec-y': 'yellow', 'rec-r': 'red' };
+// Days a record was set: a lift beating that lift's best est. 1RM so far, or a run faster than before at its distance.
+// { date: ['Back squat est. 1RM 104.5 kg', 'Fastest 5K 21:58'] }
+function recordDays() {
+  const out = {}, add = (d, x) => (out[d] || (out[d] = [])).push(x);
+  const best = {};
+  for (const l of [...state.lifts].sort((a, b) => a.date.localeCompare(b.date) || (a.savedAt || '').localeCompare(b.savedAt || ''))) {
+    const k = l.name.toLowerCase(), v = e1rm(l.weightKg, l.reps);
+    if (best[k] == null || v > best[k] + 1e-9) { best[k] = v; add(l.date, `${l.name}: est. 1RM ${fmtKg(round(v, 1))} (${fmtKg(l.weightKg)} × ${l.reps})`); }
+  }
+  const fast = {};
+  for (const r of [...state.runRecords].sort((a, b) => a.date.localeCompare(b.date))) {
+    if (fast[r.distance] == null || r.timeSec < fast[r.distance]) { fast[r.distance] = r.timeSec; add(r.date, `Fastest ${runOf(r.distance).name}: ${fmtTime(r.timeSec)}`); }
+  }
+  return out;
+}
 function renderCalendar() {
   if (!calMonth) calMonth = today().slice(0, 7);
   const [y, m] = calMonth.split('-').map(Number);
@@ -275,11 +293,15 @@ function renderCalendar() {
   const lead = (first.getDay() + 6) % 7, days = new Date(y, m, 0).getDate();
   const t = today();
   let cells = '';
+  const prs = recordDays();
   for (let i = 0; i < lead; i++) cells += '<div class="day blank"></div>';
   for (let d = 1; d <= days; d++) {
     const iso = `${calMonth}-${pad(d)}`, acts = dayActs(iso);
-    cells += `<button type="button" class="day${iso === t ? ' today' : ''}${iso > t ? ' future' : ''}" data-day="${iso}" aria-label="${esc(niceDate(iso))}: ${acts.length ? esc(acts.map((a) => catOf(a.catId).name).join(', ')) : 'nothing'}">
-      <span class="n">${d}</span><span class="marks">${acts.slice(0, 4).map((a) => { const c = catOf(a.catId); return `<span class="mark" style="--c:${c.color}" title="${esc(a.name)}">${c.icon}</span>`; }).join('')}${acts.length > 4 ? `<span class="more">+${acts.length - 4}</span>` : ''}</span></button>`;
+    const rec = recoveryOn(iso), band = recBand(rec && rec.recoveryScore), pr = prs[iso];
+    const label = [niceDate(iso), acts.length ? acts.map((a) => catOf(a.catId).name).join(', ') : 'nothing',
+      band ? `recovery ${fmt(rec.recoveryScore, 0)}% (${REC_WORD[band]})` : '', pr ? `record: ${pr.join(', ')}` : ''].filter(Boolean).join('; ');
+    cells += `<button type="button" class="day${iso === t ? ' today' : ''}${iso > t ? ' future' : ''}${band ? ' ' + band : ''}" data-day="${iso}" aria-label="${esc(label)}">
+      ${pr ? '<span class="pr" aria-hidden="true">🏆</span>' : ''}<span class="n">${d}</span><span class="marks">${acts.slice(0, 4).map((a) => { const c = catOf(a.catId); return `<span class="mark" style="--c:${c.color}" title="${esc(a.name)}">${c.icon}</span>`; }).join('')}${acts.length > 4 ? `<span class="more">+${acts.length - 4}</span>` : ''}</span></button>`;
   }
   const ws = weekStart(t), we = addDays(ws, 6);
   const monthActs = state.activities.filter((a) => a.date.slice(0, 7) === calMonth);
@@ -289,6 +311,7 @@ function renderCalendar() {
         <h2>${esc(first.toLocaleDateString(undefined, { month: 'long', year: 'numeric' }))}</h2>
         <button type="button" class="icon-btn" data-cal="1" aria-label="Next month">›</button></div>
       <div class="cal-grid">${['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((x) => `<div class="dow">${x}</div>`).join('')}${cells}</div>
+      <div class="cal-key"><span><span class="key rec-g"></span> Recovery 67%+</span><span><span class="key rec-y"></span> 34–66%</span><span><span class="key rec-r"></span> under 34%</span><span>🏆 record</span></div>
       ${calMonth !== t.slice(0, 7) ? '<button type="button" class="link-btn" data-cal="0">Back to this month</button>' : ''}
     </div>
     <div class="card"><h2>This week</h2><div class="counts">${countChips(weekActs)}</div></div>
@@ -370,7 +393,11 @@ function daySheet(iso, addNew) {
       <input class="aname" placeholder="Name (optional)" aria-label="Name" value="${esc(a ? a.name : '')}" autocomplete="off">
       <button type="button" class="x-btn" aria-label="Delete">🗑</button>
       ${a && a.time ? `<span class="muted small atime">${esc(a.time)}</span>` : ''}</div>`;
+  const rec = recoveryOn(iso), pr = recordDays()[iso];
+  const recLine = rec ? [rec.recoveryScore != null ? `<strong class="${recBand(rec.recoveryScore)}-t">Recovery ${fmt(rec.recoveryScore, 0)}%</strong>` : '',
+    rec.hrvMs != null ? `HRV ${fmt(rec.hrvMs, 0)} ms` : '', rec.restingHr != null ? `RHR ${fmt(rec.restingHr, 0)}` : '', rec.sleepHours != null ? `Sleep ${fmtSleep(rec.sleepHours)}` : ''].filter(Boolean).join(' · ') : '';
   openSheet(niceDate(iso), `<form class="form" id="dForm" novalidate>
+      ${recLine || pr ? `<div class="day-info">${recLine ? `<div>${recLine}</div>` : ''}${(pr || []).map((x) => `<div>🏆 ${esc(x)}</div>`).join('')}</div>` : ''}
       <label>Date <input type="date" id="dDate" value="${esc(iso)}" required></label>
       <div id="acts">${acts.map(row).join('')}</div>
       <div class="row-btns"><button type="button" class="mini-btn" id="addAct">+ Add a session</button><button type="button" class="link-btn" data-cats>Edit categories ›</button></div>
