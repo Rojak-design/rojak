@@ -323,3 +323,21 @@ label.imported input { border-color: var(--primary); }
 #cIcons .chip { width: 40px; height: 40px; display: grid; place-items: center; font-size: 22px; line-height: 1; padding: 0; border-radius: 10px; border: 2px solid transparent; background: var(--bg); cursor: pointer; }
 #cIcons .chip.on { border-color: var(--primary); background: var(--primary-soft, var(--bg)); }
 label.own-icon { flex-direction: row; font-weight: 400; color: var(--muted); }
+
+/* Calendar days tinted by that day's recovery (Whoop's colours); 🏆 where a record was set */
+:root { --rec-g: #16a34a; --rec-y: #ca8a04; --rec-r: #dc2626; }
+.day { position: relative; }
+.day.rec-g { background: color-mix(in srgb, var(--rec-g) 16%, var(--card)); border-color: color-mix(in srgb, var(--rec-g) 55%, transparent); }
+.day.rec-y { background: color-mix(in srgb, var(--rec-y) 18%, var(--card)); border-color: color-mix(in srgb, var(--rec-y) 60%, transparent); }
+.day.rec-r { background: color-mix(in srgb, var(--rec-r) 16%, var(--card)); border-color: color-mix(in srgb, var(--rec-r) 55%, transparent); }
+.day.today.rec-g, .day.today.rec-y, .day.today.rec-r { border-color: var(--primary); }
+.day .pr { position: absolute; top: 1px; right: 2px; font-size: 11px; line-height: 1; }
+.cal-key { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; font-size: 12px; color: var(--muted); margin-top: 10px; }
+.cal-key > span { white-space: nowrap; margin-right: 6px; }
+.cal-key .key { vertical-align: -1px; width: 12px; height: 12px; border-radius: 3px; display: inline-block; margin-left: 4px; }
+.cal-key .key.rec-g { background: color-mix(in srgb, var(--rec-g) 30%, var(--card)); border: 1px solid var(--rec-g); }
+.cal-key .key.rec-y { background: color-mix(in srgb, var(--rec-y) 30%, var(--card)); border: 1px solid var(--rec-y); }
+.cal-key .key.rec-r { background: color-mix(in srgb, var(--rec-r) 30%, var(--card)); border: 1px solid var(--rec-r); }
+.day-info { background: var(--bg); border-radius: 10px; padding: 8px 12px; font-size: 14px; display: flex; flex-direction: column; gap: 4px; }
+.rec-g-t { color: var(--good); } .rec-y-t { color: #a16207; } .rec-r-t { color: var(--danger); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .rec-y-t { color: #facc15; } }
