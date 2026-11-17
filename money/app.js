@@ -341,13 +341,22 @@ function renderSpendPie() {
   // Spending = expenses, not counting card payments or transfers. Follows the account filter.
   // Spending = expenses minus money back in the same category (so it shows what you spent yourself).
   const by = {};
+  const tripOf = {}; // slice name -> trip id
   let backTotal = 0;
   for (const t of state.transactions) {
     if (t.transferId || t.category === 'Transfer') continue;
     if (t.type !== 'expense' && !t.refund) continue;
     if (t.date < p.start || t.date > p.end) continue;
     if (txFilter !== 'all' && t.accountId !== txFilter) continue;
-    const c = t.category || 'Other';
+    // Spending linked to a trip gets its own slice per trip (whatever its category), so the categories show
+    // everyday spending.
+    const trip = t.tripId && (state.trips || []).find((y) => y.id === t.tripId);
+    let c = t.category || 'Other';
+    if (trip) {
+      c = `✈️ ${trip.name || trip.country}`;
+      if (tripOf[c] && tripOf[c] !== trip.id) c += ` (${shortDate(trip.start)})`;
+      tripOf[c] = trip.id;
+    }
     by[c] = (by[c] || 0) + (t.refund ? -t.amount : t.amount);
     if (t.refund) backTotal += t.amount;
   }
@@ -392,11 +401,12 @@ function renderSpendPie() {
         <text x="90" y="86" text-anchor="middle" class="pie-total" style="font-size:${Math.min(15, 76 / (money(total).length * 0.58)).toFixed(1)}px">${money(total)}</text>
         <text x="90" y="104" text-anchor="middle" class="pie-sub">spent</text>
       </svg>
-      <div class="pie-legend">${parts.map((x, i) => `<button class="pie-row" data-pi="${i}" ${x.others ? '' : `data-cat="${esc(x.cat)}"`}>
+      <div class="pie-legend">${parts.map((x, i) => `<button class="pie-row" data-pi="${i}" ${x.others ? '' : tripOf[x.cat] ? `data-trip="${tripOf[x.cat]}"` : `data-cat="${esc(x.cat)}"`}>
           <i style="background:${x.color}"></i><span class="pc">${esc(x.cat)}${x.others ? ` <span class="muted small">(${x.others.length})</span>` : ''}</span>
           <span class="pv">${money(x.v)}</span><span class="pp">${Math.round(x.v / total * 100)}%</span></button>`).join('')}
       </div></div>
       ${rest.length ? `<p class="muted small" style="margin:8px 0 0">Other: ${rest.map(([c, v]) => `${esc(c)} ${money(v)}`).join(' · ')}</p>` : ''}
+      ${Object.keys(tripOf).length ? `<p class="muted small" style="margin:8px 0 0">✈️ Spending linked to a trip (food, transport…) is shown as one slice per trip, not in its category. Tap a trip to see its breakdown.</p>` : ''}
       ${backTotal ? `<p class="muted small" style="margin:8px 0 0">↩ ${money(backTotal)} of money back has been taken off the categories it was for.</p>` : ''}
       <p class="muted small" style="margin:8px 0 0">Tap a category to see its transactions. Card payments and transfers aren't counted.</p>`;
   }
@@ -423,6 +433,7 @@ function renderSpendPie() {
     x.addEventListener('mouseenter', () => highlight(x.dataset.pi));
     x.addEventListener('mouseleave', () => highlight(null));
     x.addEventListener('click', () => {
+      if (x.dataset.trip) return tripDetail(x.dataset.trip); // a trip slice opens the trip
       if (!x.dataset.cat) return toast('“Other” groups the smaller categories listed below the chart');
       txCatFilter = x.dataset.cat; renderTx(); window.scrollTo(0, 0);
     });
