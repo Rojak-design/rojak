@@ -443,7 +443,9 @@ async function review(shots) {
       else parseGarminDay(s, rec);
     }
     const text = dayShots.map((s) => s.text).join('\n');
-    const date = /\byesterday\b/i.test(text) ? findDate('yesterday') : today();
+    // Yesterday only when a screen's date heading says so ("Yesterday"), not a sentence like Garmin's "a relaxing day
+    // yesterday".
+    const date = dayShots.some((sh) => sh.lines.some((l) => /^\W*yesterday\W*$/i.test(l.text) || /^\W*<?\s*yesterday\s*>?\W*$/i.test(l.text))) ? findDate('yesterday') : today();
     // Against what's already saved for the day from the other app (e.g. Whoop this morning, Garmin now): the worse.
     const saved = state.recoveryDays.find((r) => r.date === date);
     if (saved && saved.sources) for (const key of Object.keys(rec.values)) {
