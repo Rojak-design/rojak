@@ -874,6 +874,8 @@ function recoverySheet(id, imp) {
     if (imp && imp.onDone) imp.onDone();
   });
   if (existing) $('#rDel').addEventListener('click', () => deleteDaily('recoveryDays', existing, 'recovery entry'));
+  // Imported numbers on another date: the form switches to that date's entry (the first date's entry is left as it is).
+  if (imp) $('#rDate').addEventListener('change', () => { const d = $('#rDate').value; if (d && d !== imp.date) { imp.date = d; recoverySheet(null, imp); } });
 }
 
 // Body measurements and recovery are one entry per day: saving on a day that already has one replaces it.
