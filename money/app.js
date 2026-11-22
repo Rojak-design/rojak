@@ -848,7 +848,7 @@ function txSheet(id, prefill) {
   if (!t && !p.amount) setTimeout(() => { const el = $('#txAmount'); if (el) el.focus(); }, 250);
   if ($('#txShot')) {
     let catTouched = false;
-    $('#txCat').addEventListener('change', () => { catTouched = true; });
+    $('#txCat').addEventListener('change', (e) => { if (e.isTrusted) catTouched = true; }); // only your own picks, not ones filled in from a screenshot
     $('#txShot').addEventListener('change', (e) => {
       const file = e.target.files[0];
       if (file) fillTxFromScreenshot(file, { catTouched: () => catTouched, catType });
@@ -1111,7 +1111,7 @@ async function readBalanceFromScreenshot(file) {
   const best = cands[0];
   show(`<div>✅ Found <strong>${money(best.cents)}</strong>${best.label ? ` next to “${esc(best.label)}”` : ''} and filled it in below. Please check it matches your screenshot.${accNote}</div>
     ${cands.length > 1 ? `<div class="muted small" style="margin-top:6px">Not the right one? Tap another amount from the screenshot, or type it in:</div>
-    <div class="chips">${cands.slice(0, 6).map((c) => `<button type="button" class="chip" data-c="${c.cents}">${money(c.cents)}${c.label ? `<span>${esc(c.label)}</span>` : ''}</button>`).join('')}</div>` : ''}`);
+    <div class="chips">${cands.slice(0, 6).map((c) => `<button type="button" class="chip" data-c="${c.cents}">${money(c.cents)}${c.vendor || c.label ? `<span>${esc(c.vendor || c.label)}${c.date ? ` · ${esc(shortDate(c.date))}` : ''}</span>` : ''}</button>`).join('')}</div>` : ''}`);
   box.querySelectorAll('.chip').forEach((x) => x.addEventListener('click', () => pick(cands.find((c) => c.cents === +x.dataset.c))));
   pick(best);
 }
@@ -1380,6 +1380,19 @@ const MERCHANTS = [
 
 // Amounts on a receipt or payment screen, best guess first: [{cents, label}].
 // Prefers amounts labelled total / paid / fare, with a currency, in large text; skips promos (cashback, up to, vouchers…).
+// Words next to an amount that describe it rather than name a shop.
+const GENERIC_LABEL = /total|amount|paid|\bpay|fare|price|charged|balance|\bdue\b|\bgst\b|\btax\b|cashback|discount|you\b|sgd|^s\$/i;
+const MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+// A date in OCR text (22/11/2026, 22-11-26, 22 Nov 2026) as YYYY-MM-DD; day first, as in Singapore.
+function dateIn(text) {
+  let m = text.match(/\b(\d{1,2})[\/.-](\d{1,2})[\/.-](20\d{2}|\d{2})\b/);
+  let d, mo, y;
+  if (m) { d = +m[1]; mo = +m[2]; y = +m[3] < 100 ? 2000 + +m[3] : +m[3]; }
+  else if ((m = text.match(/\b(\d{1,2})\s+([A-Za-z]{3})[a-z]*,?\s+(20\d{2})\b/))) { d = +m[1]; mo = MONTHS.indexOf(m[2].toLowerCase()) + 1; y = +m[3]; }
+  else return '';
+  if (!(mo >= 1 && mo <= 12 && d >= 1 && d <= daysInMonth(y, mo))) return '';
+  return isoOf(y, mo, d);
+}
 function findSpendCandidates(lines) {
   const re = /(S\$|SGD|US\$|RM|\$)?\s*(\d{1,3}(?:[,\s]\d{3})+|\d+)[.,](\d{2})(?![\d%])\s*(SGD|S\$)?/g;
   const heights = lines.map((l) => l.h).filter(Boolean).sort((a, b) => a - b);
@@ -1399,8 +1412,21 @@ function findSpendCandidates(lines) {
       if (/cashback|up\s*to|discount|voucher|promo|\bsave\b|points|rebate|reward|balance|limit|min(imum)?\b|\bgst\b|\btax\b|change|\btip\b/.test(same)) score -= 6;
       if (medianH && l.h >= medianH * 1.3) score += 2;
       const label = l.text.replace(m[0], '').replace(/[^\w\s&()'.-]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 40);
+      // In a list of transactions (card, wallet or bank app), the name on the amount's row is the vendor, it can
+      // wrap onto the next line ("SWEET CHEEKS" / "HOLLAND"), and the date is on a line just under it.
+      const name = l.text.replace(m[0], '').replace(/[^\w\s&()'.,/-]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 40);
+      let vendor = /[a-z]{3,}/i.test(name) && !GENERIC_LABEL.test(name) ? name : '';
+      let date = '';
+      for (let k = i + 1; k <= i + 3 && k < lines.length; k++) {
+        const nt = lines[k].text;
+        if (re.test(nt)) { re.lastIndex = 0; break; } // the next row
+        re.lastIndex = 0;
+        const d = dateIn(nt);
+        if (d) { date = d; break; }
+        if (vendor && k === i + 1 && /^[A-Za-z][A-Za-z&'. -]{1,24}$/.test(nt.trim())) vendor = `${vendor} ${nt.trim()}`.slice(0, 40);
+      }
       const prev = found.get(cents);
-      if (!prev || score > prev.score) found.set(cents, { cents, score, label, order: i });
+      if (!prev || score > prev.score) found.set(cents, { cents, score, label, vendor, date, order: i });
     }
   });
   return [...found.values()].sort((a, b) => b.score - a.score || a.order - b.order);
@@ -1413,7 +1439,7 @@ function noteCandidates(text, lines) {
   for (const [re, note, cat] of MERCHANTS) if (re.test(text)) { merchant = { note, cat }; out.push(note); break; }
   const paidTo = text.match(/(?:paid|pay|sent|transfer(?:red)?)\s+(?:S?\$?[\d,.]+\s+)?to\s+([A-Za-z][A-Za-z0-9&'., -]{2,38})/i);
   if (paidTo) out.push(paidTo[1].trim());
-  const skip = /successful|you\s*paid|transfer|\bref\b|reference|cashback|shopback|google\s*pay|apple\s*pay|paylah|call|chat|share|known\s*for|service|driving|vehicle|on\s*your\s*way|missing\s*out|account|payment\s*method|receipt|thank|download|rate|tip/i;
+  const skip = /recent|transactions?\b|history|activity|card\s*number|transport\s*card|default|visa|mastercard|statement|successful|you\s*paid|transfer|\bref\b|reference|cashback|shopback|google\s*pay|apple\s*pay|paylah|call|chat|share|known\s*for|service|driving|vehicle|on\s*your\s*way|missing\s*out|account|payment\s*method|receipt|thank|download|rate|tip/i;
   for (const l of lines) {
     const s = l.text.replace(/[^\w\s&()'.,/-]/g, ' ').replace(/\s+/g, ' ').trim().replace(/^to\s+/i, '');
     if (s.length < 4 || s.length > 40 || /\d[.,]\d{2}/.test(s) || skip.test(s)) continue;
@@ -1443,31 +1469,58 @@ async function fillTxFromScreenshot(file, opts) {
   const lines = (data.lines && data.lines.length ? data.lines.map((l) => ({ text: l.text.trim(), h: l.bbox ? l.bbox.y1 - l.bbox.y0 : 0 }))
     : data.text.split(/\n+/).map((t) => ({ text: t.trim(), h: 0 }))).filter((l) => l.text);
   const amounts = findSpendCandidates(lines);
-  const { notes, merchant } = noteCandidates(data.text, lines);
+  const found = noteCandidates(data.text, lines);
+  const { merchant } = found;
+  // Vendors next to amounts come first (in a list of transactions they're the shop names).
+  // (On a receipt, the total has no name next to it: the shop name found in the text comes first then.)
+  const vendors = amounts.map((a) => a.vendor).filter(Boolean);
+  const notes = [...new Set(amounts[0] && amounts[0].vendor ? [...vendors, ...found.notes] : [...found.notes, ...vendors])].slice(0, 6);
   if (!amounts.length && !notes.length) { show('Couldn\'t find an amount in the screenshot — type the details below.'); return; }
+  // Picking an amount also picks its vendor as the note and its date (when the screenshot shows them).
   const setAmount = (c) => {
     $('#txAmount').value = (c / 100).toFixed(2);
     box.querySelectorAll('[data-amt]').forEach((x) => x.classList.toggle('on', +x.dataset.amt === c));
+    const a = amounts.find((x) => x.cents === c);
+    if (a && a.vendor) setNote(a.vendor);
+    if (listMode && a) setCat(merchantOf(a));
+    if (a && a.date && a.date <= today() && $('#txDate').value !== a.date) {
+      $('#txDate').value = a.date;
+      $('#txDate').dispatchEvent(new Event('input', { bubbles: true }));
+      $('#txDate').dispatchEvent(new Event('change', { bubbles: true }));
+    }
   };
   const setNote = (n) => {
     $('#txNote').value = n;
     box.querySelectorAll('[data-note]').forEach((x) => x.classList.toggle('on', x.dataset.note === n));
   };
-  let catMsg = '';
-  if (merchant && !opts.catTouched() && opts.catType() === 'expense' && categoriesFor('expense').includes(merchant.cat)) {
-    $('#txCat').value = merchant.cat;
+  // A well-known merchant sets the category. In a list of transactions, it's worked out for the row picked
+  // (BUS/MRT → Transport, then a café row goes back to the category you had).
+  const catBefore = $('#txCat').value;
+  let catAuto = false;
+  const merchantOf = (a) => (a && a.vendor ? (MERCHANTS.find(([re]) => re.test(a.vendor)) || null) : undefined);
+  const setCat = (m) => {
+    if (opts.catTouched() || opts.catType() !== 'expense') return '';
+    if (m && categoriesFor('expense').includes(m[2])) {
+      $('#txCat').value = m[2]; catAuto = true;
+    } else if (catAuto) { $('#txCat').value = catBefore; catAuto = false; } else return '';
     $('#txCat').dispatchEvent(new Event('change'));
-    catMsg = ` Category set to <strong>${esc(merchant.cat)}</strong>.`;
-  }
-  show(`<div>✅ Filled in${amounts.length ? ` <strong>${money(amounts[0].cents)}</strong>` : ''}${notes.length ? ` and the note “${esc(notes[0])}”` : ''}.${catMsg} Check it matches — you can change anything.</div>
+    return catAuto ? m[2] : '';
+  };
+  const listMode = amounts.filter((a) => a.vendor).length > 1;
+  let catMsg = '';
+  const firstCat = setCat(listMode ? merchantOf(amounts[0]) : merchant ? [null, merchant.note, merchant.cat] : null);
+  if (firstCat) catMsg = ` Category set to <strong>${esc(firstCat)}</strong>.`;
+  const first = amounts[0] || {};
+  const note0 = first.vendor || notes[0];
+  show(`<div>✅ Filled in${amounts.length ? ` <strong>${money(first.cents)}</strong>` : ''}${note0 ? ` and the note “${esc(note0)}”` : ''}${first.date && first.date <= today() ? `, dated ${esc(niceDate(first.date))}` : ''}.${catMsg} Check it matches — you can change anything.${amounts.length > 1 ? ' Tapping another amount below also picks its name and date.' : ''}</div>
     ${amounts.length > 1 ? `<div class="muted small" style="margin-top:6px">Other amounts in the screenshot:</div>
-      <div class="chips">${amounts.slice(0, 5).map((c) => `<button type="button" class="chip" data-amt="${c.cents}">${money(c.cents)}${c.label ? `<span>${esc(c.label)}</span>` : ''}</button>`).join('')}</div>` : ''}
+      <div class="chips">${amounts.slice(0, 5).map((c) => `<button type="button" class="chip" data-amt="${c.cents}">${money(c.cents)}${c.vendor || c.label ? `<span>${esc(c.vendor || c.label)}${c.date ? ` · ${esc(shortDate(c.date))}` : ''}</span>` : ''}</button>`).join('')}</div>` : ''}
     ${notes.length > 1 ? `<div class="muted small" style="margin-top:6px">Other notes:</div>
       <div class="chips">${notes.map((n) => `<button type="button" class="chip" data-note="${esc(n)}">${esc(n)}</button>`).join('')}</div>` : ''}`);
   box.querySelectorAll('[data-amt]').forEach((x) => x.addEventListener('click', () => setAmount(+x.dataset.amt)));
   box.querySelectorAll('[data-note]').forEach((x) => x.addEventListener('click', () => setNote(x.dataset.note)));
-  if (amounts.length) setAmount(amounts[0].cents);
-  if (notes.length) setNote(notes[0]);
+  if (notes.length) setNote(note0);
+  if (amounts.length) setAmount(first.cents);
 }
 
 /* ---------- Manage categories ---------- */
