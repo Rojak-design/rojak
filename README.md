@@ -93,6 +93,16 @@ Violet, so it's easy to tell apart from Money and Fitness.
 
 Saved in the shared store under `mod:habits`, every entry with a date: `habits` (`{name, kind: 'manual'|'linked', freq: daily|weekly|monthly, target, date (start date), end (optional last day), rule (linked: {id, …choices such as cats or accounts})}`), `checks` (`{habitId, date}`, one per day ticked).
 
+## Books module
+Wood-brown, to suit the bookshelf.
+- **+** searches **Open Library** (free, no sign-up) by title or author as you type; results show their covers. Tap one to add it (pick its status, dates, stars and notes first). Only what you type in the search is sent to Open Library. A book already in your list opens instead of being added twice.
+- **Can't find it? Type it in yourself**: title, author, and **Take a photo** / **Choose a photo** of the cover. You can also put your own photo on a book from Open Library.
+- Each book has a **status** (Want to read / Reading / Finished), **start date**, **finish date**, an optional **rating** (1–5 stars; tap the chosen star again to clear it) and **notes**. Choosing Reading fills in today as the start date if it's empty.
+- **Finishing a book** (the Finished status, or **✓ Finished** on a book you're reading) asks for the day you finished it (today unless you change it) and lets you tap 1–5 big stars ("Loved it"…). The finish date can't be in the future or before the start date.
+- Tap a book to edit or delete it. **Start** on a Want to read book moves it to Reading.
+
+Saved in the shared store under `mod:books`, every entry with a date: `books` (`{title, author, status: want|reading|finished, start, finish, rating (1–5 or null), notes, date (the day it was added), olKey, coverId (Open Library), hasCover}`). Cover pictures are kept in the same on-phone database as small JPEGs (longest side 400px) under `bookcover:<id>` — covers picked from Open Library are downloaded there so they show offline, and your photos are shrunk first. Like Memories photos they aren't in the backup file (it stays small); after a restore, Open Library covers show from Open Library again, and books whose own photo isn't on the phone get a plain coloured cover with their title.
+
 ## Publish with GitHub Pages
 1. On GitHub, open this repository → **Settings** → **Pages**.
 2. Under **Build and deployment**, set Source to **Deploy from a branch**.
@@ -119,8 +129,9 @@ On iPhone, the home-screen app and Safari keep separate data — use the home-sc
 - `core/weather.js` – the weather in the top-right corner (location, NEA and Open-Meteo forecasts, icons)
 - `money/` – the money tracker: `index.html`, `style.css`, `app.js` (accounts, transactions, categories, reconciliation, settings), `plan.js` (recurring payments, savings projects, trips and the forecast)
 - `fitness/` – the fitness module: `index.html`, `style.css`, `app.js` (calendar and categories, records, body measurements, recovery), `import.js` (reading screenshots)
+- `books/` – the books module: `index.html`, `style.css`, `app.js` (Open Library search, adding and editing books, covers, finishing and stars)
 - `habits/` – the habits module: `index.html`, `style.css`, `app.js` (the Habits screen: list, calendars, forms), `engine.js` (periods, progress, streaks and "at risk", shared with the home screen), `rules.js` (linked-habit rules that read other modules' data)
 - `money/ocr/` – Tesseract.js (Apache 2.0, licences included) for reading screenshots (Money balances and receipts, Fitness imports); loaded only when you pick a screenshot
 - `manifest.json`, `sw.js`, `rojak-icon*`, `rojak-apple-touch-icon.png` – make it installable and work offline (`icon-v2.svg`, `apple-touch-icon-v2.png` are the money tracker's own tab icon)
 
-When you change any file, bump `VERSION` in `sw.js` and the matching `?v=` numbers in `index.html`, `money/index.html`, `fitness/index.html` and `habits/index.html` (keep them all the same) so phones pick up the update with all files matching.
+When you change any file, bump `VERSION` in `sw.js` and the matching `?v=` numbers in `index.html`, `money/index.html`, `fitness/index.html`, `habits/index.html` and `books/index.html` (keep them all the same) so phones pick up the update with all files matching.
