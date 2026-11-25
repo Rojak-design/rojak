@@ -216,7 +216,7 @@ function timelineHtml(done) {
     </section>`;
   }).join('')}</div>`;
 }
-/* ---------- Tabs: Books (the timeline) and Favourites ---------- */
+/* ---------- Tabs: Books (the timeline), Favourites and Insights (insights.js) ---------- */
 let view = 'books';
 // Small per-phone conveniences (not your data): the Favourites choices. Never required.
 const prefGet = (k, d) => { try { const v = localStorage.getItem('rojak-books:' + k); return v == null ? d : JSON.parse(v); } catch { return d; } };
@@ -277,6 +277,7 @@ function render() {
   const thisMonth = done.filter((b) => b.finish.startsWith(month)).length;
   $('#summaryLine').textContent = books.length ? `${thisMonth} finished this month · ${thisYear} this year` : '';
   if (view === 'favourites') return renderFavourites();
+  if (view === 'insights') return renderInsights();
   if (!books.length) {
     $('#books').innerHTML = `<div class="empty">No books yet.<br>Tap <strong>+</strong> to search for a book by its title or author.</div>`;
     return;
@@ -395,6 +396,7 @@ document.addEventListener('keydown', (e) => {
 $('#fab').addEventListener('click', () => searchSheet());
 $('#books').addEventListener('click', (e) => { if (e.target.closest('#tagCta')) tagBooks(); });
 bindGenreDialog();
+bindInsights();
 
 /* ---------- Search (Open Library) ---------- */
 let searchAbort = null, searchTimer = 0, lastQuery = '';

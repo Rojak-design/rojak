@@ -287,3 +287,56 @@ body { padding-bottom: calc(var(--tabbar-h) + var(--safe-b) + 90px); }
 .fav-book:active .cover { transform: scale(.96); }
 .fav-title { font-size: 12px; font-weight: 600; text-align: center; width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 @media (prefers-reduced-motion: reduce) { .switch-ui, .switch-ui::after { transition: none; } }
+
+/* ---------- Insights ---------- */
+/* Genre colours for "Genres over time": a fixed order, checked for colour-blind and normal-vision separation on
+   each mode's card colour (light and dark are their own steps, not a flip). "Other" is a deliberate neutral grey. */
+:root { --s1: #257de0; --s2: #f47230; --s3: #00b894; --s4: #f2a600; --s5: #ee7fac; --s-other: #57534e; --bar: var(--primary); }
+@media (prefers-color-scheme: dark) {
+  :root { --s1: #338ced; --s2: #e76624; --s3: #00a888; --s4: #d28e05; --s5: #e24d8b; --s-other: #d6d3d1; }
+}
+.ins-period { margin: 4px 0 14px; }
+.ins-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 12px; }
+.ins-stat { background: var(--card); border-radius: var(--radius); padding: 12px 8px; text-align: center; box-shadow: 0 1px 2px rgba(0,0,0,.05); }
+.ins-stat .v { font-size: 28px; font-weight: 800; line-height: 1.1; color: var(--text); }
+.ins-stat .v small { font-size: 18px; color: var(--star); margin-left: 1px; }
+.ins-stat .l { font-size: 12px; color: var(--muted); margin-top: 3px; line-height: 1.3; }
+.ins-card { background: var(--card); border-radius: var(--radius); padding: 14px; margin-bottom: 12px; box-shadow: 0 1px 2px rgba(0,0,0,.05); }
+.ins-card h3 { margin: 0; font-size: 16px; }
+.ins-sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
+.ins-tip { font-size: 13px; color: var(--muted); margin-top: 10px; min-height: 18px; }
+.ins-empty { color: var(--muted); font-size: 14px; padding: 14px 0 4px; }
+.ins-note { font-size: 12px; color: var(--muted); margin-top: 10px; }
+.ins-authors { margin: 8px 0 0; padding: 0; list-style: none; counter-reset: a; }
+.ins-authors li { counter-increment: a; display: flex; align-items: baseline; gap: 8px; padding: 7px 0; border-top: 1px solid var(--line); font-size: 15px; }
+.ins-authors li:first-child { border-top: 0; }
+.ins-authors li::before { content: counter(a); width: 18px; flex: none; font-weight: 800; color: var(--primary); }
+.ins-authors .name { flex: 1; min-width: 0; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ins-authors .n { flex: none; color: var(--muted); font-size: 13px; }
+
+/* Horizontal bars: label, bar, value (values in text colour, never the bar colour) */
+.hbars { display: flex; flex-direction: column; gap: 2px; margin-top: 10px; }
+.hbar { display: grid; grid-template-columns: minmax(70px, 34%) 1fr auto; align-items: center; gap: 8px; border: 0; background: none;
+  padding: 5px 4px; margin: 0 -4px; border-radius: 8px; font: inherit; color: inherit; text-align: left; cursor: pointer; }
+.hbar.sel { background: var(--primary-soft); }
+.hbar-label { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hbar-track { height: 14px; display: flex; }
+.hbar-fill { height: 100%; background: var(--bar); border-radius: 0 4px 4px 0; }
+.hbar-value { font-size: 13px; font-weight: 700; min-width: 30px; text-align: right; font-variant-numeric: tabular-nums; }
+
+/* Vertical bars over time; stacked segments are separated by a 2px gap in the card colour */
+.vbars { display: grid; grid-template-columns: repeat(var(--cols), minmax(0, 1fr)); gap: 4px; margin-top: 12px; }
+.vbar { border: 0; background: none; padding: 0; font: inherit; color: inherit; cursor: pointer; display: flex; flex-direction: column; align-items: stretch; gap: 4px; border-radius: 6px; }
+.vbar-plot { position: relative; height: 130px; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; border-bottom: 1px solid var(--line); }
+.vbar-stack { width: min(100%, 26px); display: flex; flex-direction: column-reverse; gap: 2px; }
+.vbar-stack .vseg:last-child { border-radius: 4px 4px 0 0; }
+.vseg { display: block; min-height: 2px; background: var(--bar); }
+.vseg.s1 { background: var(--s1); } .vseg.s2 { background: var(--s2); } .vseg.s3 { background: var(--s3); }
+.vseg.s4 { background: var(--s4); } .vseg.s5 { background: var(--s5); } .vseg.other { background: var(--s-other); }
+.vbar-num { font-size: 11px; font-weight: 700; margin-bottom: 2px; font-variant-numeric: tabular-nums; }
+.vbar-label { font-size: 11px; color: var(--muted); text-align: center; white-space: nowrap; overflow: hidden; }
+.vbar.sel .vbar-label { color: var(--primary); font-weight: 700; }
+.vbar.sel .vbar-plot { background: var(--primary-soft); border-radius: 6px 6px 0 0; }
+.ins-legend { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 10px; font-size: 12px; }
+.ins-legend span { display: inline-flex; align-items: center; gap: 5px; }
+.ins-legend i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; min-height: 0; }
