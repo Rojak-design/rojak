@@ -244,3 +244,47 @@ main { padding: 0 16px; max-width: 640px; margin: 0 auto; }
 .mem-view-nav.prev { left: 10px; }
 .mem-view-nav.next { right: 10px; }
 @media (prefers-reduced-motion: reduce) { .mem-grid.slide-l, .mem-grid.slide-r, .mem-tile img { animation: none; } }
+
+/* Books card: a wooden bookshelf. The card is the wood (warm gradient with fine grain lines); inside, a darker
+   recess with the books being read standing on a plank. */
+.module-card.books {
+  --wood: #9a5b2c; --wood-dark: #6e3d1b; --wood-light: #b87745; --cream: #fbf1e4;
+  color: var(--cream);
+  background:
+    repeating-linear-gradient(93deg, rgba(255,255,255,.035) 0 2px, transparent 2px 9px, rgba(0,0,0,.04) 9px 11px, transparent 11px 23px),
+    repeating-linear-gradient(88deg, transparent 0 37px, rgba(0,0,0,.06) 37px 39px, transparent 39px 71px),
+    linear-gradient(180deg, var(--wood-light), var(--wood) 45%, var(--wood-dark));
+  box-shadow: 0 2px 6px rgba(60,30,10,.25), inset 0 1px 0 rgba(255,255,255,.18);
+}
+@media (prefers-color-scheme: dark) {
+  .module-card.books { --wood: #74421f; --wood-dark: #4a2810; --wood-light: #8d5429; --cream: #f3e4d0; }
+}
+.module-card.books .open { color: var(--cream); opacity: .9; }
+.module-card.books h2 { text-shadow: 0 1px 1px rgba(0,0,0,.3); }
+.shelf { position: relative; }
+.shelf-back {
+  display: flex; align-items: flex-end; gap: 8px; min-height: 118px; padding: 12px 14px 0; overflow: hidden;
+  border-radius: 8px 8px 0 0;
+  background: linear-gradient(180deg, rgba(0,0,0,.42), rgba(0,0,0,.22));
+  box-shadow: inset 0 6px 10px rgba(0,0,0,.35), inset 6px 0 8px rgba(0,0,0,.18), inset -6px 0 8px rgba(0,0,0,.18);
+}
+.shelf-plank {
+  height: 14px; margin: 0 -6px; border-radius: 3px;
+  background: linear-gradient(180deg, #d39260 0, var(--wood-light) 3px, var(--wood) 60%, var(--wood-dark));
+  box-shadow: 0 4px 6px rgba(0,0,0,.35);
+}
+@media (prefers-color-scheme: dark) { .shelf-plank { background: linear-gradient(180deg, #a86a3a 0, var(--wood-light) 3px, var(--wood) 60%, var(--wood-dark)); } }
+.shelf-book {
+  position: relative; flex: none; width: 66px; aspect-ratio: 2 / 3; border-radius: 2px 4px 4px 2px; overflow: hidden;
+  display: flex; align-items: center; justify-content: center; padding: 4px; text-align: center; color: #fff;
+  font-size: 9px; font-weight: 700; line-height: 1.15; overflow-wrap: anywhere;
+  box-shadow: 3px 0 6px rgba(0,0,0,.45), inset 3px 0 0 rgba(0,0,0,.15);
+}
+.shelf-book span { display: -webkit-box; -webkit-line-clamp: 5; -webkit-box-orient: vertical; overflow: hidden; }
+.shelf-book img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.shelf-more { align-self: center; font-weight: 700; font-size: 15px; color: var(--cream); padding: 0 4px; }
+.shelf-msg { flex: 1; align-self: center; text-align: center; font-size: 14px; font-style: italic; color: var(--cream); opacity: .85; padding: 0 10px 12px; }
+.shelf-caption { font-size: 13px; margin-top: 10px; opacity: .92; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.shelf-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
+.shelf-stats > div { background: rgba(0,0,0,.2); border-radius: 10px; padding: 8px 10px; font-size: 13px; box-shadow: inset 0 1px 2px rgba(0,0,0,.2); }
+.shelf-stats strong { font-size: 20px; margin-right: 2px; }

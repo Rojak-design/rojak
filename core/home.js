@@ -180,6 +180,53 @@ async function renderBackupInfo() {
     } catch { /* ignore */ }
   }
 }
+/* ----- Books: a wooden bookshelf with the books being read standing on it ----- */
+// Covers come from the Books module's pictures on the phone ('bookcover:<id>'), otherwise Open Library's link,
+// otherwise a plain coloured cover with the title (as in Books).
+let bookUrls = [];
+function bookColour(title) {
+  let h = 0;
+  for (const c of String(title || '')) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+  return `hsl(${h % 360} 38% 42%)`;
+}
+async function renderBooks(data) {
+  const el = $('#booksSummary');
+  const books = (data && Array.isArray(data.books)) ? data.books : [];
+  const t = today(), done = books.filter((b) => b.status === 'finished' && /^\d{4}-\d{2}-\d{2}$/.test(b.finish || ''));
+  const month = done.filter((b) => b.finish.startsWith(t.slice(0, 7))).length;
+  const year = done.filter((b) => b.finish.startsWith(t.slice(0, 4))).length;
+  const reading = books.filter((b) => b.status === 'reading').sort((a, b) => (b.start || b.date || '').localeCompare(a.start || a.date || ''));
+  const MAX = 5, shown = reading.slice(0, MAX);
+  const urls = [];
+  const covers = [];
+  for (const b of shown) {
+    let src = '';
+    if (b.hasCover) {
+      try { const blob = await dbGet('bookcover:' + b.id); if (blob instanceof Blob) { src = URL.createObjectURL(blob); urls.push(src); } } catch { /* plain cover */ }
+    }
+    if (!src && b.coverId) src = `https://covers.openlibrary.org/b/id/${encodeURIComponent(b.coverId)}-M.jpg`;
+    covers.push(`<div class="shelf-book" style="background:${bookColour(b.title)}" title="${esc(b.title)}"><span>${esc(b.title)}</span>${src ? `<img src="${esc(src)}" alt="${esc(b.title)}" onerror="this.remove()">` : ''}</div>`);
+  }
+  for (const u of bookUrls) URL.revokeObjectURL(u);
+  bookUrls = urls;
+  const more = reading.length - shown.length;
+  const caption = reading.length === 1 ? `Reading ${esc(reading[0].title)}${reading[0].author ? ` · ${esc(reading[0].author)}` : ''}`
+    : reading.length ? `Reading ${reading.length} books` : '';
+  el.innerHTML = `
+    <div class="shelf ${reading.length ? '' : 'empty'}">
+      <div class="shelf-back">
+        ${reading.length ? covers.join('') + (more > 0 ? `<div class="shelf-more">+${more}</div>` : '')
+          : `<div class="shelf-msg">${books.length ? 'Empty shelf — tap to pick your next read' : 'Empty shelf — tap to add your first book'}</div>`}
+      </div>
+      <div class="shelf-plank"></div>
+    </div>
+    ${caption ? `<div class="shelf-caption">${caption}</div>` : ''}
+    <div class="shelf-stats">
+      <div><strong>${month}</strong> book${month === 1 ? '' : 's'} this month</div>
+      <div><strong>${year}</strong> book${year === 1 ? '' : 's'} this year</div>
+    </div>`;
+}
+
 // The Habits card updates as soon as a water bottle is tapped (Water habits read the bottles).
 let lastHabits = null;
 Water.onChange(() => { if (lastHabits) { try { renderHabits(...lastHabits); } catch (err) { console.error(err); } } });
@@ -189,6 +236,10 @@ async function refresh() {
     const money = await Rojak.load('money'), fitness = await Rojak.load('fitness');
     renderMoney(money);
     renderFitness(fitness);
+    try { await renderBooks(await Rojak.load('books')); } catch (err) {
+      console.error(err);
+      $('#booksSummary').innerHTML = '<div class="small">Tap to open Books.</div>';
+    }
     try {
       const habits = await Rojak.load('habits');
       Water.setHabits(habits); // the bottles also celebrate when a Water habit's target is reached
@@ -203,6 +254,7 @@ async function refresh() {
     console.error(err);
     $('#moneySummary').innerHTML = `<div class="muted small">Could not open storage on this browser.</div>`;
     $('#fitnessSummary').innerHTML = '';
+    $('#booksSummary').innerHTML = '';
     $('#habitsSummary').innerHTML = '';
   }
 }
