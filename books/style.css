@@ -123,9 +123,11 @@ textarea:focus { outline: 2px solid var(--primary); outline-offset: -1px; }
 .book-title { font-weight: 700; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 .book-author { color: var(--muted); font-size: 14px; margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .book-meta { color: var(--muted); font-size: 12px; margin-top: 4px; }
-.book .stars.mini { margin-top: 3px; }
+.row-stars { gap: 0; margin: 3px 0 0 -3px; }
+.row-stars .star { padding: 3px; }
+.row-stars .star svg { width: 22px; height: 22px; }
 .quick { flex: none; border: 1px solid var(--line); background: var(--card); color: var(--primary); border-radius: 10px; padding: 8px 10px;
-  font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+  font: inherit; font-size: 13px; font-weight: 600; line-height: 1.25; cursor: pointer; }
 
 /* ---------- Stars ---------- */
 .stars { display: flex; gap: 4px; align-items: center; }

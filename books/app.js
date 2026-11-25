@@ -169,14 +169,18 @@ function bookRow(b) {
   const meta = b.status === 'finished' ? (b.finish ? `Finished ${niceDate(b.finish)}` : 'Finished')
     : b.status === 'reading' ? (b.start ? `Started ${niceDate(b.start)}` : 'Reading')
     : `Added ${niceDate(b.date)}`;
-  const quick = b.status === 'reading' ? `<button type="button" class="quick" data-finish="${b.id}">✓ Finished</button>`
-    : b.status === 'want' ? `<button type="button" class="quick" data-start="${b.id}">Start</button>` : '';
+  // Actions (not the status — that's the heading the book is under).
+  const quick = b.status === 'reading' ? `<button type="button" class="quick" data-finish="${b.id}">Mark as<br>finished</button>`
+    : b.status === 'want' ? `<button type="button" class="quick" data-start="${b.id}">Start<br>reading</button>` : '';
+  // Books you're reading or have read show their stars, which can be tapped to rate them right here.
+  const rate = b.status === 'want' ? '' : `<div class="stars row-stars" data-rate="${b.id}" role="radiogroup" aria-label="Rating">${[1, 2, 3, 4, 5]
+    .map((i) => `<button type="button" class="star ${i <= (b.rating || 0) ? 'on' : ''}" data-v="${i}" role="radio" aria-checked="${i === b.rating}" aria-label="${i} star${i > 1 ? 's' : ''}">${STAR_SVG}</button>`).join('')}</div>`;
   return `<div class="book" role="button" tabindex="0" data-open="${b.id}">
     ${coverHtml(b)}
     <div class="book-info">
       <div class="book-title">${esc(b.title)}</div>
       ${b.author ? `<div class="book-author">${esc(b.author)}</div>` : ''}
-      ${miniStars(b.rating)}
+      ${rate}
       <div class="book-meta">${esc(meta)}</div>
     </div>
     ${quick}
@@ -203,7 +207,16 @@ function render() {
 }
 $('#books').addEventListener('click', async (e) => {
   const f = e.target.closest('[data-finish]'), s = e.target.closest('[data-start]'), o = e.target.closest('[data-open]');
-  if (f) {
+  const star = e.target.closest('[data-rate] .star');
+  if (star) {
+    // Tap a star to rate; tap the chosen star again to clear the rating.
+    const b = byId(star.parentNode.dataset.rate), n = +star.dataset.v;
+    b.rating = b.rating === n ? null : n;
+    await save(); render();
+    const row = $(`[data-rate="${b.id}"]`);
+    if (row && b.rating) $$('.star', row).slice(0, b.rating).forEach((x, i) => { x.querySelector('svg').style.animationDelay = `${i * 40}ms`; x.classList.add('pop'); });
+    toast(b.rating ? `${STAR_WORDS[b.rating]} · ${b.rating} star${b.rating > 1 ? 's' : ''}` : 'Rating cleared');
+  } else if (f) {
     const b = byId(f.dataset.finish);
     const r = await askFinish(b, b.finish, b.rating);
     if (!r) return;
