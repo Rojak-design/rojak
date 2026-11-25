@@ -15,7 +15,7 @@
 'use strict';
 
 /* ---------- State ---------- */
-const emptyState = () => ({ books: [], settings: {} });
+const emptyState = () => ({ books: [], settings: {} }); // + genres (see genres.js)
 let state = emptyState();
 
 async function load() {
@@ -23,8 +23,11 @@ async function load() {
   state = Object.assign(emptyState(), saved || {});
   if (!Array.isArray(state.books)) state.books = [];
   if (!state.settings || typeof state.settings !== 'object') state.settings = {};
+  // The starting genre list, the first time this version opens (books themselves aren't changed).
+  const newGenres = !Array.isArray(state.genres);
+  if (newGenres) state.genres = DEFAULT_GENRES.map((g) => ({ ...g }));
   // As in Habits: saving the empty list first means the first book gets the real time it was saved.
-  if (!saved) await save();
+  if (!saved || newGenres) await save();
   await loadCovers();
 }
 function save() {
@@ -226,7 +229,9 @@ function render() {
   }
   const reading = books.filter((b) => b.status === 'reading').sort((a, b) => (b.start || b.date).localeCompare(a.start || a.date));
   const want = books.filter((b) => b.status === 'want').sort((a, b) => b.date.localeCompare(a.date) || (b.savedAt || '').localeCompare(a.savedAt || ''));
+  const noGenre = books.filter((b) => !hasGenre(b)).length;
   $('#books').innerHTML = `
+    ${noGenre ? `<button type="button" class="tag-cta" id="tagCta"><span>🏷 <strong>Tag my books</strong></span><span class="muted">${noGenre} without a genre ›</span></button>` : ''}
     <h2 class="group-h">Currently reading${reading.length ? ` · ${reading.length}` : ''}</h2>
     ${reading.length ? reading.map(bookRow).join('') : `<div class="tl-empty">Nothing on the go. Pick a book from <strong>Want to read</strong> below, or tap <strong>+</strong>.</div>`}
     <h2 class="group-h">Reading timeline</h2>
@@ -247,6 +252,7 @@ function bookDetails(b) {
       <div class="detail-title">${esc(b.title)}</div>
       ${b.author ? `<div class="book-author">${esc(b.author)}</div>` : ''}
       <span class="status-chip ${b.status}">${STATUS[b.status]}</span>
+      ${hasGenre(b) ? `<div class="genre-tags">${bookGenres(b).map((g) => `<span>${esc(g.name)}</span>`).join('')}</div>` : ''}
       ${b.status === 'want' ? '' : `<div class="stars big" id="dStars"></div><div class="star-word" id="dWord"></div>`}
       <div class="muted small">${esc(dates)}</div>
       ${b.notes ? `<div class="detail-notes">${esc(b.notes)}</div>` : ''}
@@ -328,10 +334,13 @@ if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
 $('#sheet').addEventListener('click', (e) => { if (e.target.closest('[data-close]')) closeSheet(); });
 document.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape') return;
-  if (!$('#finishDlg').classList.contains('hidden')) finishDone(null);
+  if (!$('#genreDlg').classList.contains('hidden')) closeGenres();
+  else if (!$('#finishDlg').classList.contains('hidden')) finishDone(null);
   else if (!$('#sheet').classList.contains('hidden')) closeSheet();
 });
 $('#fab').addEventListener('click', () => searchSheet());
+$('#books').addEventListener('click', (e) => { if (e.target.closest('#tagCta')) tagBooks(); });
+bindGenreDialog();
 
 /* ---------- Search (Open Library) ---------- */
 let searchAbort = null, searchTimer = 0, lastQuery = '';
@@ -364,14 +373,14 @@ async function search(text, again) {
   searchAbort = new AbortController();
   box.innerHTML = '<div class="result-msg">Searching…</div>';
   try {
-    const url = `https://openlibrary.org/search.json?q=${encodeURIComponent(query)}&fields=key,title,author_name,first_publish_year,cover_i&limit=20`;
+    const url = `https://openlibrary.org/search.json?q=${encodeURIComponent(query)}&fields=key,title,author_name,first_publish_year,cover_i,subject&limit=20`;
     const res = await fetch(url, { signal: searchAbort.signal });
     if (!res.ok) throw new Error('HTTP ' + res.status);
     const data = await res.json();
     if (query !== lastQuery || !$('#results')) return;
     found = (data.docs || []).filter((d) => d.title).map((d) => ({
       title: d.title, author: (d.author_name || []).slice(0, 2).join(', '), year: d.first_publish_year || null,
-      olKey: d.key || null, coverId: d.cover_i || null
+      olKey: d.key || null, coverId: d.cover_i || null, subjects: Array.isArray(d.subject) ? d.subject : []
     }));
     box.innerHTML = found.length ? found.map((d, i) => `<button type="button" class="result" data-i="${i}">
         ${coverHtml(d, '', d.coverId ? olCover(d.coverId, 'M') : '')}
@@ -452,6 +461,10 @@ function bookForm(b, pre = {}) {
       </div>
       <label>Title <input id="bTitle" value="${esc(v.title)}" autocomplete="off" required></label>
       <label>Author <input id="bAuthor" value="${esc(v.author)}" autocomplete="off"></label>
+      <div>
+        <div class="label-t genre-label">Genres <span class="hint">(1–3)</span> <button type="button" class="link-btn sm" id="bEditGenres">Edit genres ›</button></div>
+        <div id="bGenres"></div>
+      </div>
       <div class="label-t">Status</div>
       <div class="seg" id="bStatus">${Object.entries(STATUS).map(([k, t]) => `<button type="button" data-s="${k}" class="${v.status === k ? 'on' : ''}">${t}</button>`).join('')}</div>
       <div class="row2">
@@ -472,6 +485,10 @@ function bookForm(b, pre = {}) {
   preview();
   $('#bTitle').addEventListener('change', preview);
   const stars = starPicker($('#bStars'), v.rating);
+  const genres = genrePicker($('#bGenres'), v.genres || []);
+  // A book picked from the search: its Open Library subjects suggest genres (ticked, for you to confirm or change).
+  if (!ex && pre.subjects) genres.suggest(suggestGenres(pre.subjects));
+  $('#bEditGenres').addEventListener('click', () => editGenres(() => genres.refresh()));
   const showDates = () => {
     $('#startL').classList.toggle('hidden', v.status === 'want');
     $('#finishL').classList.toggle('hidden', v.status !== 'finished');
@@ -522,7 +539,7 @@ function bookForm(b, pre = {}) {
     if (v.status === 'finished' && !isISO(finish)) return warn('Pick the day you finished it.');
     if (start > today() || finish > today()) return warn("Dates can't be in the future.");
     if (start && finish && finish < start) return warn('The finish date is before the start date.');
-    const data = { title, author, status: v.status, start, finish, rating: stars.get(), notes: $('#bNotes').value.trim(), olKey: v.olKey || null, coverId: v.coverId || null };
+    const data = { title, author, status: v.status, start, finish, rating: stars.get(), notes: $('#bNotes').value.trim(), genres: genres.get(), olKey: v.olKey || null, coverId: v.coverId || null };
     let book = ex;
     if (ex) Object.assign(ex, data);
     else { book = Object.assign({ id: uid(), date: today(), hasCover: false }, data); state.books.push(book); }
@@ -565,6 +582,6 @@ async function init() {
 }
 init();
 // Coming back to the app (e.g. on a new day) shows fresh numbers.
-function refresh() { if ($('#sheet').classList.contains('hidden') && $('#finishDlg').classList.contains('hidden')) render(); }
+function refresh() { if ($('#sheet').classList.contains('hidden') && $('#finishDlg').classList.contains('hidden') && $('#genreDlg').classList.contains('hidden')) render(); }
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') refresh(); });
 window.addEventListener('pageshow', (e) => { if (e.persisted) refresh(); });

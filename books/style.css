@@ -212,3 +212,39 @@ textarea:focus { outline: 2px solid var(--primary); outline-offset: -1px; }
 .detail .star-word { margin-top: -4px; }
 .detail-notes { white-space: pre-wrap; text-align: left; align-self: stretch; background: var(--bg); border-radius: 12px; padding: 12px 14px;
   font-size: 15px; line-height: 1.5; margin-top: 6px; }
+
+/* ---------- Genres ---------- */
+.genre-label { display: flex; align-items: baseline; gap: 6px; margin-bottom: 8px; }
+.genre-label .link-btn, .tag-label .link-btn { margin-left: auto; }
+.link-btn.sm { font-size: 13px; padding: 0 2px; }
+.genre-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.genre-chip { border: 1px solid var(--line); background: var(--card); color: var(--text); border-radius: 999px; padding: 7px 12px;
+  font: inherit; font-size: 14px; cursor: pointer; }
+.genre-chip.on { background: var(--primary); border-color: var(--primary); color: var(--on-primary); font-weight: 600; }
+.genre-chip.sug.on::before { content: '✨ '; }
+.genre-hint { margin-top: 6px; }
+.genre-tags { display: flex; flex-wrap: wrap; justify-content: center; gap: 5px; }
+.genre-tags span { font-size: 12px; font-weight: 600; padding: 3px 9px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); }
+
+/* Tag my books: the button on the main screen and the one-at-a-time screen */
+.tag-cta { display: flex; justify-content: space-between; align-items: center; gap: 10px; width: 100%; margin: 4px 0 6px;
+  border: 1.5px dashed var(--primary); background: var(--primary-soft); color: var(--primary); border-radius: var(--radius);
+  padding: 12px 14px; font: inherit; font-size: 14px; cursor: pointer; text-align: left; }
+.tag-cta .muted { font-size: 13px; white-space: nowrap; }
+.tag-count { text-align: center; margin: -6px 0 8px; font-weight: 600; }
+.tag-label { display: flex; align-items: baseline; gap: 6px; margin: 16px 0 8px; }
+.tag-btns { display: grid; grid-template-columns: 1fr 2fr; gap: 8px; margin: 18px 0 4px; }
+#sheetBody > .link-btn[data-close] { display: block; margin: 4px auto 0; }
+
+/* Editing the genre list (over the sheet) */
+.genre-dlg { z-index: 26; }
+.genre-dlg .dlg-panel { text-align: left; max-width: 440px; }
+.genre-list { display: flex; flex-direction: column; gap: 6px; max-height: 48vh; overflow-y: auto; margin: 0 -4px; padding: 0 4px; }
+.genre-row { display: flex; align-items: center; gap: 4px; }
+.genre-row input { flex: 1; min-width: 0; padding: 9px 10px; }
+.genre-used { width: 22px; text-align: center; font-size: 12px; color: var(--muted); font-weight: 600; }
+.icon-btn.sm { width: 32px; height: 32px; font-size: 14px; flex: none; }
+.icon-btn:disabled { opacity: .3; }
+.genre-add { display: flex; gap: 8px; }
+.genre-add input { flex: 1; min-width: 0; }
+.genre-add .btn { width: auto; padding: 12px 18px; }
