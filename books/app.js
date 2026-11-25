@@ -216,6 +216,59 @@ function timelineHtml(done) {
     </section>`;
   }).join('')}</div>`;
 }
+/* ---------- Tabs: Books (the timeline) and Favourites ---------- */
+let view = 'books';
+// Small per-phone conveniences (not your data): the Favourites choices. Never required.
+const prefGet = (k, d) => { try { const v = localStorage.getItem('rojak-books:' + k); return v == null ? d : JSON.parse(v); } catch { return d; } };
+const prefSet = (k, v) => { try { localStorage.setItem('rojak-books:' + k, JSON.stringify(v)); } catch { /* not kept */ } };
+function showView(v) {
+  view = v;
+  $$('.tabbar button').forEach((b) => b.classList.toggle('active', b.dataset.view === v));
+  $('#fab').classList.toggle('hidden', v !== 'books');
+  window.scrollTo(0, 0);
+  render();
+}
+$('.tabbar').addEventListener('click', (e) => { const b = e.target.closest('[data-view]'); if (b && b.dataset.view !== view) showView(b.dataset.view); });
+
+/* ---------- Favourites: books rated 5★ (and 4★ when switched on) ---------- */
+const fav = { four: prefGet('fav4', false), sort: prefGet('favSort', 'rating'), genre: prefGet('favGenre', '') };
+function renderFavourites() {
+  const min = fav.four ? 4 : 5;
+  const all = state.books.filter((b) => (b.rating || 0) >= min);
+  // Only genres that some favourite has; a genre filter that no longer matches anything goes back to All.
+  const genres = state.genres.filter((g) => all.some((b) => (b.genres || []).includes(g.id)));
+  if (fav.genre && !genres.some((g) => g.id === fav.genre)) fav.genre = '';
+  const list = all.filter((b) => !fav.genre || (b.genres || []).includes(fav.genre));
+  const byFinish = (a, b) => (b.finish || '').localeCompare(a.finish || '') || (b.updatedAt || '').localeCompare(a.updatedAt || '');
+  list.sort(fav.sort === 'rating' ? (a, b) => b.rating - a.rating || byFinish(a, b) : byFinish);
+  const g = genreById(fav.genre);
+  $('#books').innerHTML = `
+    <div class="fav-controls">
+      <label class="switch"><input type="checkbox" id="fav4" ${fav.four ? 'checked' : ''}><span class="switch-ui"></span>Include 4★ books</label>
+      <div class="seg sm" id="favSort" aria-label="Sort by">
+        <button type="button" data-sort="rating" class="${fav.sort === 'rating' ? 'on' : ''}">★ Rating</button>
+        <button type="button" data-sort="finish" class="${fav.sort === 'finish' ? 'on' : ''}">📅 Finish date</button>
+      </div>
+      ${genres.length ? `<div class="fav-genres" id="favGenres">
+        <button type="button" class="genre-chip ${fav.genre ? '' : 'on'}" data-fg="">All</button>
+        ${genres.map((x) => `<button type="button" class="genre-chip ${fav.genre === x.id ? 'on' : ''}" data-fg="${esc(x.id)}">${esc(x.name)}</button>`).join('')}
+      </div>` : ''}
+    </div>
+    ${list.length ? `<div class="fav-count muted small">${list.length} ${list.length === 1 ? 'favourite' : 'favourites'}${g ? ` in ${esc(g.name)}` : ''}</div>
+      <div class="fav-grid">${list.map((b) => `<button type="button" class="fav-book" data-open="${b.id}" aria-label="${esc(b.title)}, ${b.rating} stars">
+        ${coverHtml(b)}${miniStars(b.rating)}<span class="fav-title">${esc(b.title)}</span></button>`).join('')}</div>`
+    : `<div class="empty">${state.books.some((b) => b.rating) ? `No ${fav.four ? '4★ or 5★' : '5★'} books yet.` : 'No rated books yet.'}<br>Books you rate ${fav.four ? '4 or 5' : '5'} stars appear here.${fav.four ? '' : '<br>Switch on <strong>Include 4★ books</strong> to see more.'}</div>`}`;
+}
+$('#books').addEventListener('change', (e) => {
+  if (e.target.id !== 'fav4') return;
+  fav.four = e.target.checked; prefSet('fav4', fav.four); render();
+});
+$('#books').addEventListener('click', (e) => {
+  const s = e.target.closest('[data-sort]'), g = e.target.closest('[data-fg]');
+  if (s) { fav.sort = s.dataset.sort; prefSet('favSort', fav.sort); render(); }
+  if (g) { fav.genre = g.dataset.fg; prefSet('favGenre', fav.genre); render(); }
+});
+
 function render() {
   const books = state.books;
   const year = today().slice(0, 4), month = today().slice(0, 7);
@@ -223,6 +276,7 @@ function render() {
   const thisYear = done.filter((b) => b.finish.startsWith(year)).length;
   const thisMonth = done.filter((b) => b.finish.startsWith(month)).length;
   $('#summaryLine').textContent = books.length ? `${thisMonth} finished this month · ${thisYear} this year` : '';
+  if (view === 'favourites') return renderFavourites();
   if (!books.length) {
     $('#books').innerHTML = `<div class="empty">No books yet.<br>Tap <strong>+</strong> to search for a book by its title or author.</div>`;
     return;
