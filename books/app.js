@@ -164,7 +164,7 @@ async function downloadCover(book) {
   } catch (err) { console.warn('Cover not downloaded (its link is used instead):', err); }
 }
 
-/* ---------- The list (Stage 1) ---------- */
+/* ---------- Currently reading and Want to read: one row per book ---------- */
 function bookRow(b) {
   const meta = b.status === 'finished' ? (b.finish ? `Finished ${niceDate(b.finish)}` : 'Finished')
     : b.status === 'reading' ? (b.start ? `Started ${niceDate(b.start)}` : 'Reading')
@@ -186,24 +186,94 @@ function bookRow(b) {
     ${quick}
   </div>`;
 }
+// The reading timeline: books you're reading at the top, then finished books by year and month (newest first),
+// covers side by side within a month. Books you want to read are folded away at the bottom.
+let wantOpen = false;
+const monthName = (key) => new Date(+key.slice(0, 4), +key.slice(5, 7) - 1, 1).toLocaleDateString(undefined, { month: 'long' });
+const newestFinished = (a, b) => (b.finish || '').localeCompare(a.finish || '') || (b.updatedAt || '').localeCompare(a.updatedAt || '');
+function timelineHtml(done) {
+  if (!done.length) return `<div class="tl-empty">Books you finish appear here, on your reading timeline.</div>`;
+  const years = new Map();
+  for (const b of done.slice().sort(newestFinished)) {
+    const y = b.finish.slice(0, 4), m = b.finish.slice(0, 7);
+    if (!years.has(y)) years.set(y, new Map());
+    const months = years.get(y);
+    if (!months.has(m)) months.set(m, []);
+    months.get(m).push(b);
+  }
+  return `<div class="timeline">${[...years].map(([y, months]) => {
+    const n = [...months.values()].reduce((s, l) => s + l.length, 0);
+    return `<section class="tl-year">
+      <h3 class="tl-year-h"><span>${y}</span><small>${n} book${n === 1 ? '' : 's'}</small></h3>
+      ${[...months].map(([m, list]) => `<div class="tl-month">
+        <div class="tl-month-h">${esc(monthName(m))}<small> · ${list.length}</small></div>
+        <div class="tl-covers">${list.map((b) => `<button type="button" class="tl-book" data-open="${b.id}" aria-label="${esc(b.title)}">
+          ${coverHtml(b)}${miniStars(b.rating)}</button>`).join('')}</div>
+      </div>`).join('')}
+    </section>`;
+  }).join('')}</div>`;
+}
 function render() {
   const books = state.books;
   const year = today().slice(0, 4), month = today().slice(0, 7);
-  const done = books.filter((b) => b.status === 'finished');
-  const thisYear = done.filter((b) => (b.finish || '').startsWith(year)).length;
-  const thisMonth = done.filter((b) => (b.finish || '').startsWith(month)).length;
+  const done = books.filter((b) => b.status === 'finished' && isISO(b.finish));
+  const thisYear = done.filter((b) => b.finish.startsWith(year)).length;
+  const thisMonth = done.filter((b) => b.finish.startsWith(month)).length;
   $('#summaryLine').textContent = books.length ? `${thisMonth} finished this month · ${thisYear} this year` : '';
   if (!books.length) {
     $('#books').innerHTML = `<div class="empty">No books yet.<br>Tap <strong>+</strong> to search for a book by its title or author.</div>`;
     return;
   }
-  const groups = [
-    ['reading', books.filter((b) => b.status === 'reading').sort((a, b) => (b.start || b.date).localeCompare(a.start || a.date))],
-    ['want', books.filter((b) => b.status === 'want').sort((a, b) => b.date.localeCompare(a.date) || (b.savedAt || '').localeCompare(a.savedAt || ''))],
-    ['finished', done.sort((a, b) => (b.finish || '').localeCompare(a.finish || '') || (b.updatedAt || '').localeCompare(a.updatedAt || ''))]
-  ];
-  $('#books').innerHTML = groups.filter(([, list]) => list.length)
-    .map(([s, list]) => `<h2 class="group-h">${STATUS[s]} · ${list.length}</h2>${list.map(bookRow).join('')}`).join('');
+  const reading = books.filter((b) => b.status === 'reading').sort((a, b) => (b.start || b.date).localeCompare(a.start || a.date));
+  const want = books.filter((b) => b.status === 'want').sort((a, b) => b.date.localeCompare(a.date) || (b.savedAt || '').localeCompare(a.savedAt || ''));
+  $('#books').innerHTML = `
+    <h2 class="group-h">Currently reading${reading.length ? ` · ${reading.length}` : ''}</h2>
+    ${reading.length ? reading.map(bookRow).join('') : `<div class="tl-empty">Nothing on the go. Pick a book from <strong>Want to read</strong> below, or tap <strong>+</strong>.</div>`}
+    <h2 class="group-h">Reading timeline</h2>
+    ${timelineHtml(done)}
+    ${want.length ? `<details class="want-list" ${wantOpen ? 'open' : ''}><summary>Want to read · ${want.length}</summary>${want.map(bookRow).join('')}</details>` : ''}`;
+  const w = $('.want-list');
+  if (w) w.addEventListener('toggle', () => { wantOpen = w.open; });
+}
+
+/* ---------- One book's details ---------- */
+function bookDetails(b) {
+  const days = b.start && b.finish ? Math.round((dayDate(b.finish) - dayDate(b.start)) / 864e5) + 1 : null;
+  const dates = [b.start && `Started ${niceDate(b.start)}`, b.status === 'finished' && b.finish && `Finished ${niceDate(b.finish)}`,
+    days && `${days} day${days === 1 ? '' : 's'}`].filter(Boolean).join(' · ') || `Added ${niceDate(b.date)}`;
+  openSheet('', `
+    <div class="detail">
+      ${coverHtml(b, 'xl')}
+      <div class="detail-title">${esc(b.title)}</div>
+      ${b.author ? `<div class="book-author">${esc(b.author)}</div>` : ''}
+      <span class="status-chip ${b.status}">${STATUS[b.status]}</span>
+      ${b.status === 'want' ? '' : `<div class="stars big" id="dStars"></div><div class="star-word" id="dWord"></div>`}
+      <div class="muted small">${esc(dates)}</div>
+      ${b.notes ? `<div class="detail-notes">${esc(b.notes)}</div>` : ''}
+    </div>
+    <div class="form" style="margin-top:16px">
+      ${b.status === 'reading' ? '<button class="btn" type="button" id="dFinish">Mark as finished</button>' : ''}
+      ${b.status === 'want' ? '<button class="btn" type="button" id="dStart">Start reading</button>' : ''}
+      <button class="btn secondary" type="button" id="dEdit">✏️ Edit details</button>
+    </div>`);
+  if (b.status !== 'want') {
+    const word = (n) => { $('#dWord').textContent = n ? STAR_WORDS[n] : 'Tap to rate'; };
+    word(b.rating);
+    starPicker($('#dStars'), b.rating, async (n) => { b.rating = n || null; word(n); await save(); render(); });
+  }
+  $('#dEdit').addEventListener('click', () => bookForm(b));
+  if ($('#dFinish')) $('#dFinish').addEventListener('click', async () => {
+    const r = await askFinish(b, b.finish, b.rating);
+    if (!r) return;
+    Object.assign(b, { status: 'finished', finish: r.finish, rating: r.rating });
+    await save(); render(); bookDetails(b);
+    toast(`Finished “${b.title}”`);
+  });
+  if ($('#dStart')) $('#dStart').addEventListener('click', async () => {
+    Object.assign(b, { status: 'reading', start: b.start || today() });
+    await save(); render(); bookDetails(b);
+    toast(`Started “${b.title}”`);
+  });
 }
 $('#books').addEventListener('click', async (e) => {
   const f = e.target.closest('[data-finish]'), s = e.target.closest('[data-start]'), o = e.target.closest('[data-open]');
@@ -228,10 +298,10 @@ $('#books').addEventListener('click', async (e) => {
     Object.assign(b, { status: 'reading', start: b.start || today() });
     await save(); render();
     toast(`Started “${b.title}”`);
-  } else if (o) bookForm(byId(o.dataset.open));
+  } else if (o) bookDetails(byId(o.dataset.open));
 });
 $('#books').addEventListener('keydown', (e) => {
-  if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('[data-open]')) { e.preventDefault(); bookForm(byId(e.target.dataset.open)); }
+  if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('.book[data-open]')) { e.preventDefault(); bookDetails(byId(e.target.dataset.open)); }
 });
 
 /* ---------- Sheet ---------- */

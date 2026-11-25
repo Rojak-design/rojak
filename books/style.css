@@ -170,3 +170,45 @@ textarea:focus { outline: 2px solid var(--primary); outline-offset: -1px; }
 .dlg-cover { display: flex; justify-content: center; }
 .dlg-cover:empty { display: none; }
 @media (prefers-reduced-motion: reduce) { .dlg-panel { animation: none; } }
+
+/* ---------- Reading timeline ---------- */
+/* A line down the left; each year is a pill on the line, each month a dot with its covers side by side. */
+.tl-empty { color: var(--muted); font-size: 14px; padding: 6px 4px 10px; line-height: 1.5; }
+.timeline { position: relative; padding-left: 22px; margin-left: 6px; }
+.timeline::before { content: ''; position: absolute; left: 0; top: 14px; bottom: 6px; width: 3px; border-radius: 2px;
+  background: linear-gradient(var(--primary), var(--line)); }
+.tl-year { margin-bottom: 8px; }
+.tl-year-h { position: relative; display: flex; align-items: baseline; gap: 8px; margin: 0 0 6px -36px; }
+.tl-year-h span { background: var(--primary); color: var(--on-primary); font-size: 16px; font-weight: 800; padding: 4px 12px;
+  border-radius: 999px; box-shadow: 0 0 0 4px var(--bg); }
+.tl-year-h small { font-size: 13px; font-weight: 600; color: var(--muted); }
+.tl-month { position: relative; padding: 8px 0 10px; }
+.tl-month::before { content: ''; position: absolute; left: -28px; top: 13px; width: 11px; height: 11px; border-radius: 50%;
+  background: var(--card); border: 3px solid var(--primary); }
+.tl-month-h { font-weight: 700; font-size: 15px; margin-bottom: 8px; }
+.tl-month-h small { font-weight: 500; color: var(--muted); }
+.tl-covers { display: flex; flex-wrap: wrap; gap: 12px 10px; }
+.tl-book { border: 0; background: none; padding: 0; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 4px; font: inherit; }
+.tl-book .cover { width: 72px; font-size: 10px; transition: transform .15s; }
+.tl-book:active .cover { transform: scale(.96); }
+.tl-book .stars.mini svg { width: 12px; height: 12px; }
+
+/* Want to read: folded away under the timeline */
+.want-list { margin-top: 18px; }
+.want-list > summary { cursor: pointer; font-size: 13px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .04em;
+  padding: 10px 4px; list-style: none; }
+.want-list > summary::-webkit-details-marker { display: none; }
+.want-list > summary::after { content: ' ›'; }
+.want-list[open] > summary::after { content: ' ⌄'; }
+
+/* ---------- One book's details ---------- */
+.detail { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 8px; }
+.cover.xl { width: 140px; font-size: 15px; margin-bottom: 6px; box-shadow: 0 6px 18px rgba(0,0,0,.25), inset 4px 0 0 rgba(0,0,0,.12); }
+.detail-title { font-size: 21px; font-weight: 800; line-height: 1.25; }
+.detail .book-author { white-space: normal; font-size: 15px; }
+.status-chip { font-size: 12px; font-weight: 700; padding: 4px 10px; border-radius: 999px; background: var(--primary-soft); color: var(--primary); }
+.status-chip.finished { background: #dcfce7; color: #166534; }
+@media (prefers-color-scheme: dark) { .status-chip.finished { background: #14361f; color: #86efac; } }
+.detail .star-word { margin-top: -4px; }
+.detail-notes { white-space: pre-wrap; text-align: left; align-self: stretch; background: var(--bg); border-radius: 12px; padding: 12px 14px;
+  font-size: 15px; line-height: 1.5; margin-top: 6px; }
