@@ -90,6 +90,7 @@ Violet, so it's easy to tell apart from Money and Fitness.
   - **Money – no-spend days**: days with no day-to-day spending on any account or card (recurring bills, card bill payments and own transfers don't count against you), counted once the day is over.
   - **Money – days you logged entries or reconciled**: e.g. log spending on 5 days a week, or reconcile once a week.
   - **Water – bottles of water a day**: from the bottles on the home screen, e.g. "Drink at least 5 bottles a day" (target up to 5, in halves). Checked over each **day**: a day is done (filled in on the calendar) when you reached the target; it counts with the daily habits on the home screen's Habits card.
+  - **Books – books finished**: books marked Finished in Books, counted on their finish date, per **week** or **month**, e.g. "Finish at least 2 books a month". The days you finished a book are filled in on the habit's calendar; changing a book's finish date in Books moves it to that week or month.
   - New rules (for future modules) are added in `habits/rules.js`: one entry each, described at the top of that file.
 
 Saved in the shared store under `mod:habits`, every entry with a date: `habits` (`{name, kind: 'manual'|'linked', freq: daily|weekly|monthly, target, date (start date), end (optional last day), rule (linked: {id, …choices such as cats or accounts})}`), `checks` (`{habitId, date}`, one per day ticked).
@@ -103,6 +104,8 @@ Wood-brown, to suit the bookshelf.
 - Books you are reading or have finished show 5 stars on the list: tap one to rate the book right there (tap the chosen star again to clear it). **Mark as finished** on a book you are reading opens the finish date and stars; **Start reading** on a Want to read book moves it to Reading (started today).
 - **Reading timeline**: the Books screen shows **Currently reading** at the top, then your finished books as a vertical timeline, newest at the top, by year (e.g. **2026** · 4 books) and then month (**November** · 3). A month's books sit side by side as covers, with their stars under them. **Want to read** is folded away at the bottom (tap it to open).
 - Tap any book or cover to see its details: a big cover, the author, status, stars (tap to rate), when you started and finished it and how many days it took, and your notes. **Edit details** changes or deletes it; **Mark as finished** / **Start reading** are there too.
+
+- **Habits**: add a Linked habit with module **Books** (e.g. "Finish at least 2 books a month"); see the Habits module below.
 
 Saved in the shared store under `mod:books`, every entry with a date: `books` (`{title, author, status: want|reading|finished, start, finish, rating (1–5 or null), notes, date (the day it was added), olKey, coverId (Open Library), hasCover}`). Cover pictures are kept in the same on-phone database as small JPEGs (longest side 400px) under `bookcover:<id>` — covers picked from Open Library are downloaded there so they show offline, and your photos are shrunk first. Like Memories photos they aren't in the backup file (it stays small); after a restore, Open Library covers show from Open Library again, and books whose own photo isn't on the phone get a plain coloured cover with their title.
 

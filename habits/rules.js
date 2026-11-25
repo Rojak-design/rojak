@@ -556,6 +556,30 @@ const HABIT_RULES = [
     format: (v) => `${W_fmt(v)} bottle${v === 1 ? '' : 's'}`,
     progress: (v, target) => `${W_fmt(v)} of ${W_fmt(target)} bottles`,
     defaultName: (opts, target) => `Drink ${W_fmt(target)} bottle${target === 1 ? '' : 's'} of water a day`
+  },
+
+  /* ----- Books (saved under 'mod:books' as books: { status, finish, … }) ----- */
+  {
+    id: 'books.finished',
+    module: 'books', moduleName: 'Books', icon: '📚',
+    label: 'Books finished',
+    periods: ['week', 'month'],
+    defaultTarget: { week: 1, month: 2 },
+    // Works before any book is added (no books finished yet counts as 0).
+    alwaysReady: true,
+    targetLabel: () => 'books',
+    optionsHtml: () => '<span class="hint">Every book marked Finished in Books counts, on its finish date.</span>',
+    readOptions: () => ({}),
+    measure(src, opts, from, to) {
+      const days = [];
+      for (const b of (src.books && src.books.books) || []) {
+        if (b && b.status === 'finished' && /^\d{4}-\d{2}-\d{2}$/.test(b.finish || '') && b.finish >= from && b.finish <= to) days.push(b.finish);
+      }
+      return { value: days.length, days };
+    },
+    format: (v) => `${v} book${v === 1 ? '' : 's'}`,
+    progress: (v, target) => `${v} of ${target} book${target === 1 ? '' : 's'} finished`,
+    defaultName: (opts, target, period) => `Finish at least ${target} book${target === 1 ? '' : 's'} a ${period}`
   }
 ];
   const ruleById = (id) => HABIT_RULES.find((r) => r.id === id);
