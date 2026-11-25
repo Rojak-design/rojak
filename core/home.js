@@ -181,7 +181,7 @@ async function renderBackupInfo() {
   }
 }
 /* ----- Books: a wooden bookshelf with the books being read standing on it ----- */
-// Books being read stand first (with a bookmark), then this year's finished books. Covers come from the Books module's pictures on the phone ('bookcover:<id>'), otherwise Open Library's link,
+// Books being read stand first (with a bookmark), then this year's finished books. Covers come from the Books module's pictures ('mod:bookcovers'; before Books has moved them there, 'bookcover:<id>'), otherwise Open Library's link,
 // otherwise a plain coloured cover with the title (as in Books).
 let bookUrls = [];
 function bookColour(title) {
@@ -203,9 +203,13 @@ async function renderBooks(data) {
   const MAX = 5, shown = onShelf.slice(0, MAX);
   const urls = [];
   const covers = [];
+  let saved = null;
+  try { saved = await Rojak.load('bookcovers'); } catch { /* plain covers */ }
   for (const b of shown) {
     let src = '';
-    if (b.hasCover) {
+    const pic = saved && Array.isArray(saved.covers) && saved.covers.find((c) => c.id === b.id);
+    if (pic && typeof pic.data === 'string' && pic.data.startsWith('data:image/')) src = pic.data;
+    else if (b.hasCover) {
       try { const blob = await dbGet('bookcover:' + b.id); if (blob instanceof Blob) { src = URL.createObjectURL(blob); urls.push(src); } } catch { /* plain cover */ }
     }
     if (!src && b.coverId) src = `https://covers.openlibrary.org/b/id/${encodeURIComponent(b.coverId)}-M.jpg`;
