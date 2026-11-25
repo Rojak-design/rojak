@@ -181,7 +181,7 @@ async function renderBackupInfo() {
   }
 }
 /* ----- Books: a wooden bookshelf with the books being read standing on it ----- */
-// Covers come from the Books module's pictures on the phone ('bookcover:<id>'), otherwise Open Library's link,
+// Books being read stand first (with a bookmark), then this year's finished books. Covers come from the Books module's pictures on the phone ('bookcover:<id>'), otherwise Open Library's link,
 // otherwise a plain coloured cover with the title (as in Books).
 let bookUrls = [];
 function bookColour(title) {
@@ -196,7 +196,11 @@ async function renderBooks(data) {
   const month = done.filter((b) => b.finish.startsWith(t.slice(0, 7))).length;
   const year = done.filter((b) => b.finish.startsWith(t.slice(0, 4))).length;
   const reading = books.filter((b) => b.status === 'reading').sort((a, b) => (b.start || b.date || '').localeCompare(a.start || a.date || ''));
-  const MAX = 5, shown = reading.slice(0, MAX);
+  // On the shelf: the books being read (with a bookmark), then the books finished this year, newest first.
+  const finished = done.filter((b) => b.finish.startsWith(t.slice(0, 4)))
+    .sort((a, b) => b.finish.localeCompare(a.finish) || (b.updatedAt || '').localeCompare(a.updatedAt || ''));
+  const onShelf = [...reading, ...finished];
+  const MAX = 5, shown = onShelf.slice(0, MAX);
   const urls = [];
   const covers = [];
   for (const b of shown) {
@@ -205,17 +209,18 @@ async function renderBooks(data) {
       try { const blob = await dbGet('bookcover:' + b.id); if (blob instanceof Blob) { src = URL.createObjectURL(blob); urls.push(src); } } catch { /* plain cover */ }
     }
     if (!src && b.coverId) src = `https://covers.openlibrary.org/b/id/${encodeURIComponent(b.coverId)}-M.jpg`;
-    covers.push(`<div class="shelf-book" style="background:${bookColour(b.title)}" title="${esc(b.title)}"><span>${esc(b.title)}</span>${src ? `<img src="${esc(src)}" alt="${esc(b.title)}" onerror="this.remove()">` : ''}</div>`);
+    const isReading = b.status === 'reading';
+    covers.push(`<div class="shelf-book${isReading ? ' reading' : ''}" style="background:${bookColour(b.title)}" title="${esc(b.title)}${isReading ? ' (reading)' : ''}"><span>${esc(b.title)}</span>${src ? `<img src="${esc(src)}" alt="${esc(b.title)}" onerror="this.remove()">` : ''}</div>`);
   }
   for (const u of bookUrls) URL.revokeObjectURL(u);
   bookUrls = urls;
-  const more = reading.length - shown.length;
+  const more = onShelf.length - shown.length;
   const caption = reading.length === 1 ? `Reading ${esc(reading[0].title)}${reading[0].author ? ` · ${esc(reading[0].author)}` : ''}`
-    : reading.length ? `Reading ${reading.length} books` : '';
+    : reading.length ? `Reading ${reading.length} books` : finished.length ? 'Nothing on the go — tap to pick your next read' : '';
   el.innerHTML = `
-    <div class="shelf ${reading.length ? '' : 'empty'}">
+    <div class="shelf ${onShelf.length ? '' : 'empty'}">
       <div class="shelf-back">
-        ${reading.length ? covers.join('') + (more > 0 ? `<div class="shelf-more">+${more}</div>` : '')
+        ${onShelf.length ? covers.join('') + (more > 0 ? `<div class="shelf-more">+${more}</div>` : '')
           : `<div class="shelf-msg">${books.length ? 'Empty shelf — tap to pick your next read' : 'Empty shelf — tap to add your first book'}</div>`}
       </div>
       <div class="shelf-plank"></div>
