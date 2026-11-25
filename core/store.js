@@ -63,7 +63,8 @@ const Rojak = (() => {
   // Modules not listed here are kept under 'mod:<id>' and every list in them is dated.
   const MODULES = {
     money: { name: 'Money', key: 'state', collections: ['accounts', 'transactions', 'reconciliations', 'recurring', 'projects', 'trips'] },
-    fitness: { name: 'Fitness' }
+    fitness: { name: 'Fitness' },
+    bookcovers: { name: 'Book covers' }
   };
   const keyOf = (id) => (MODULES[id] && MODULES[id].key) || 'mod:' + id;
   const nameOf = (id) => (MODULES[id] && MODULES[id].name) || id.charAt(0).toUpperCase() + id.slice(1);

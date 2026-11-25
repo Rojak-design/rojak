@@ -6,10 +6,14 @@
               or '', set when finished), rating (1–5 or null), notes, date (the day it was added),
               olKey (Open Library work, e.g. '/works/OL45883W', or null), coverId (Open Library cover id or null),
               hasCover (true when a cover picture is saved on the phone) }
-   Cover pictures are kept in the same on-phone database (IndexedDB) under 'bookcover:<book id>' as small JPEGs
-   (longest side 400px): covers picked from Open Library are downloaded there so they show offline, and photos you
-   take or upload are shrunk first. Like Memories photos they aren't in the main backup, which stays small; an
-   Open Library cover still shows from its link (coverId) when the picture isn't on the phone.
+   Cover pictures are saved under 'mod:bookcovers', a module of their own so the books themselves stay quick to save:
+     covers: { id (the book's id), date (the day the picture was saved), data (a small JPEG as a data: URL, longest
+               side 400px) }
+   Being a module in the shared store, they're in Export backup, Restore ("Book covers"), Undo and Delete all data.
+   Covers picked from Open Library are downloaded there so they show offline, and photos you take or upload are
+   shrunk first. An Open Library cover still shows from its link (coverId) when its picture isn't saved.
+   (Earlier versions kept each picture under 'bookcover:<book id>', outside the backup; they're moved over the
+   first time this version opens.)
 
    Searching sends only what you type to Open Library (openlibrary.org, free, no key). */
 'use strict';
@@ -94,21 +98,47 @@ function starPicker(root, value, onChange) {
 
 /* ---------- Covers ---------- */
 const COVER_MAX = 400;
-const coverKey = (id) => 'bookcover:' + id;
+const OLD_COVER = 'bookcover:'; // where earlier versions kept each picture
 const olCover = (coverId, size) => `https://covers.openlibrary.org/b/id/${encodeURIComponent(coverId)}-${size}.jpg`;
-const coverUrls = new Map(); // book id → object URL of the picture saved on the phone
+let covers = { covers: [] };     // 'mod:bookcovers'
+const coverUrls = new Map();     // book id → its saved picture (data: URL)
 
+const toDataUrl = (blob) => new Promise((res, rej) => {
+  const r = new FileReader();
+  r.onload = () => res(r.result);
+  r.onerror = () => rej(r.error);
+  r.readAsDataURL(blob);
+});
+const saveCovers = () => Rojak.save('bookcovers', covers);
 async function loadCovers() {
-  for (const b of state.books) if (b.hasCover && !coverUrls.has(b.id)) {
-    try {
-      const blob = await dbGet(coverKey(b.id));
-      if (blob instanceof Blob) coverUrls.set(b.id, URL.createObjectURL(blob));
-    } catch (err) { console.error(err); }
-  }
+  const saved = await Rojak.load('bookcovers');
+  covers = saved && Array.isArray(saved.covers) ? saved : { covers: [] };
+  if (!saved) await moveOldCovers();
+  coverUrls.clear();
+  for (const c of covers.covers) if (c && typeof c.data === 'string' && c.data.startsWith('data:image/')) coverUrls.set(c.id, c.data);
 }
-function setCoverUrl(id, blob) {
-  if (coverUrls.has(id)) URL.revokeObjectURL(coverUrls.get(id));
-  if (blob) coverUrls.set(id, URL.createObjectURL(blob)); else coverUrls.delete(id);
+// Moves pictures saved by earlier versions ('bookcover:<id>', not in the backup) into 'mod:bookcovers'. The old
+// copies are deleted only once the new ones are saved and read back.
+async function moveOldCovers() {
+  const keys = (await dbKeys()).filter((k) => typeof k === 'string' && k.startsWith(OLD_COVER));
+  const moved = [];
+  for (const k of keys) {
+    try {
+      const blob = await dbGet(k);
+      if (!(blob instanceof Blob)) continue;
+      covers.covers.push({ id: k.slice(OLD_COVER.length), date: today(), data: await toDataUrl(blob) });
+      moved.push(k);
+    } catch (err) { console.error('Cover not moved:', err); }
+  }
+  await saveCovers(); // also saves an empty list, so later covers get their real save time
+  if (!moved.length) return;
+  const back = await dbGet('mod:bookcovers');
+  const ok = back && Array.isArray(back.covers) && moved.every((k) => back.covers.some((c) => c.id === k.slice(OLD_COVER.length)));
+  if (ok) for (const k of moved) await dbDel(k).catch(() => {});
+}
+function setCover(id, data) {
+  covers.covers = covers.covers.filter((c) => c.id !== id);
+  if (data) { covers.covers.push({ id, date: today(), data }); coverUrls.set(id, data); } else coverUrls.delete(id);
 }
 // A plain cover's colour, picked from the title so each book keeps its own.
 function plainColour(title) {
@@ -149,8 +179,8 @@ async function shrink(blob, max = COVER_MAX) {
   return new Promise((res, rej) => c.toBlob((b) => (b ? res(b) : rej(new Error('could not shrink the picture'))), 'image/jpeg', 0.8));
 }
 async function saveCover(book, blob) {
-  await dbSet(coverKey(book.id), blob);
-  setCoverUrl(book.id, blob);
+  setCover(book.id, await toDataUrl(blob));
+  await saveCovers();
   book.hasCover = true;
 }
 // Downloads an Open Library cover so it shows offline. If it can't be downloaded, its link is used instead.
@@ -613,8 +643,7 @@ function bookForm(b, pre = {}) {
   if (ex) $('#bDel').addEventListener('click', async () => {
     if (!confirm(`Delete “${ex.title}”? (Its cover and notes are deleted too.)`)) return;
     state.books = state.books.filter((x) => x.id !== ex.id);
-    try { await dbDel(coverKey(ex.id)); } catch (err) { console.error(err); }
-    setCoverUrl(ex.id, null);
+    if (coverUrls.has(ex.id)) { setCover(ex.id, null); await saveCovers(); }
     await save();
     closeSheet();
     render();
